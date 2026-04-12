@@ -7,7 +7,7 @@ export interface PlayerPosition {
   accuracy: number;
 }
 
-const DISCOVERY_RADIUS_METERS = 30;
+const DISCOVERY_RADIUS_METERS = 20;
 
 @Injectable({ providedIn: 'root' })
 export class GpsService {

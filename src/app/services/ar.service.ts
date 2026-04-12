@@ -45,7 +45,7 @@ export class ArService {
     this.scene.add(dirLight);
   }
 
-  async startAR(): Promise<void> {
+  async startAR(overlayRoot?: Element): Promise<void> {
     if (!navigator.xr) {
       this.error.set('WebXR not available in this browser');
       return;
@@ -55,16 +55,21 @@ export class ArService {
     this.loading.set(true);
 
     try {
-      this.xrSession = await navigator.xr.requestSession('immersive-ar', {
+      // domOverlay root must be a transparent element that does NOT include the canvas,
+      // otherwise the dark container background blocks the camera feed.
+      const sessionInit: Record<string, unknown> = {
         requiredFeatures: [],
-        optionalFeatures: ['hit-test'],
-      });
+        optionalFeatures: ['hit-test', 'dom-overlay'],
+      };
+      if (overlayRoot) sessionInit['domOverlay'] = { root: overlayRoot };
+
+      this.xrSession = await (navigator.xr as any).requestSession('immersive-ar', sessionInit);
 
       // Must be awaited — session isn't ready to render until this resolves
       await this.renderer.xr.setSession(this.xrSession);
       this.active.set(true);
 
-      this.xrSession.addEventListener('end', () => {
+      this.xrSession!.addEventListener('end', () => {
         this.ngZone.run(() => {
           this.active.set(false);
           this.loading.set(false);

@@ -1,5 +1,5 @@
 import {
-  Component, ElementRef, ViewChild, OnInit, OnDestroy, effect
+  Component, ElementRef, ViewChild, OnInit, OnDestroy, effect, computed, signal
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import * as THREE from 'three';
@@ -19,7 +19,7 @@ import fossils from '../../data/fossils.json';
   template: `
     <div class="ar-container">
 
-      <!-- Background shown whenever AR isn't running (desktop or pre-start on Android) -->
+      <!-- Splash screen — shown before AR starts, layered over the dark canvas -->
       <div class="no-ar-bg" *ngIf="!arService.active()">
         <div class="no-ar-content">
           <div class="logo">🦴</div>
@@ -29,9 +29,8 @@ import fossils from '../../data/fossils.json';
               {{ gps.playerPosition() ? '📍 GPS active' : '⏳ Waiting for GPS...' }}
             </span>
           </div>
-          <div class="fossil-count">{{ allFossils.length }} fossils hidden nearby</div>
+          <div class="fossil-count">{{ allFossils().length }} fossils hidden nearby</div>
 
-          <!-- Show Start AR button on any device — let WebXR fail gracefully if unsupported -->
           <button class="start-ar-btn" (click)="onStartAR()" [disabled]="arService.loading()">
             {{ arService.loading() ? '⏳ Starting...' : '📷 Start AR' }}
           </button>
@@ -43,41 +42,52 @@ import fossils from '../../data/fossils.json';
         </div>
       </div>
 
-      <!-- AR canvas — always present so WebGL context stays alive -->
+      <!-- XR rendering surface — must stay OUTSIDE the dom-overlay root -->
       <canvas #arCanvas class="ar-canvas"></canvas>
 
-      <app-hud
-        [collected]="collectedIds.size"
-        [total]="allFossils.length"
-        [nearbyCount]="gps.nearbyFossils().length"
-        [gpsActive]="!!gps.playerPosition()"
-        [showARPrompt]="!arService.active() && arService.supported()"
-        (startAR)="onStartAR()"
-        (openMap)="showMap = true"
-        (openCollection)="showCollection = true"
-        (openLearn)="showLearn = true"
-      />
+      <!--
+        dom-overlay root: transparent div floated over the camera feed.
+        Contains ONLY the HUD and popups — no backgrounds that would block the camera.
+      -->
+      <div #arOverlay class="ar-overlay">
+        <app-hud
+          [collected]="collectedIds.size"
+          [total]="allFossils().length"
+          [nearbyCount]="gps.nearbyFossils().length"
+          [gpsActive]="!!gps.playerPosition()"
+          [showARPrompt]="!arService.active() && arService.supported()"
+          [arActive]="arService.active()"
+          [fossilDirections]="fossilDirections()"
+          (startAR)="onStartAR()"
+          (openMap)="showMap = true"
+          (openCollection)="showCollection = true"
+          (openLearn)="showLearn = true"
+        />
 
-      <!-- Fossil discovered popup -->
-      <div class="overlay-backdrop" *ngIf="selectedFossil" (click)="selectedFossil = null">
-        <div class="overlay-center" (click)="$event.stopPropagation()">
-          <app-fossil-card
-            [fossil]="selectedFossil!"
-            (close)="selectedFossil = null"
-            (collect)="onCollect($event)"
-          />
+        <!-- Fossil discovered popup -->
+        <div class="overlay-backdrop" *ngIf="selectedFossil" (click)="selectedFossil = null">
+          <div class="overlay-center" (click)="$event.stopPropagation()">
+            <app-fossil-card
+              [fossil]="selectedFossil!"
+              (close)="selectedFossil = null"
+              (collect)="onCollect($event)"
+            />
+          </div>
         </div>
-      </div>
 
-      <!-- GPS error -->
-      <div class="gps-error-toast" *ngIf="gps.error()">
-        {{ gps.error() }}
+        <!-- GPS error toast -->
+        <div class="gps-error-toast" *ngIf="gps.error()">
+          {{ gps.error() }}
+        </div>
       </div>
     </div>
   `,
   styles: [`
     .ar-container { position: fixed; inset: 0; background: #1a0f00; }
-    .ar-canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+    .ar-canvas    { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+    /* Transparent overlay — dom-overlay root. NO background so camera shows through. */
+    .ar-overlay   { position: fixed; inset: 0; pointer-events: none; }
 
     .no-ar-bg {
       position: fixed; inset: 0; z-index: 10;
@@ -87,9 +97,8 @@ import fossils from '../../data/fossils.json';
     .no-ar-content { text-align: center; color: #f5e6c8; padding: 24px; }
     .logo { font-size: 64px; margin-bottom: 12px; }
     h1 { font-size: 28px; font-weight: 800; letter-spacing: 1px; margin-bottom: 8px; color: #ffd700; }
-    .subtitle { font-size: 14px; color: #c8a86b; margin-bottom: 24px; }
     .status-row { margin-bottom: 12px; }
-    .status-row .ok     { color: #4ade80; font-weight: 600; }
+    .status-row .ok      { color: #4ade80; font-weight: 600; }
     .status-row .waiting { color: #facc15; font-weight: 600; }
     .fossil-count {
       display: inline-block; background: rgba(139,105,20,0.3);
@@ -103,14 +112,15 @@ import fossils from '../../data/fossils.json';
       font-size: 18px; font-weight: 700; cursor: pointer;
       box-shadow: 0 4px 20px rgba(139,105,20,0.5);
     }
-    .start-ar-btn:active { transform: scale(0.96); }
+    .start-ar-btn:active  { transform: scale(0.96); }
+    .start-ar-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
     .hint { font-size: 12px; color: #facc15; margin-top: 8px; padding: 0 20px; }
     .hint.error { color: #f87171; background: rgba(200,0,0,0.2); border-radius: 8px; padding: 8px 16px; }
-    .start-ar-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 
     .overlay-backdrop {
       position: fixed; inset: 0; background: rgba(0,0,0,0.6);
       display: flex; align-items: center; justify-content: center; z-index: 100;
+      pointer-events: all;
     }
 
     .gps-error-toast {
@@ -121,9 +131,11 @@ import fossils from '../../data/fossils.json';
   `]
 })
 export class ArViewComponent implements OnInit, OnDestroy {
-  @ViewChild('arCanvas', { static: true }) canvasRef!: ElementRef<HTMLCanvasElement>;
+  @ViewChild('arCanvas',  { static: true }) canvasRef!:  ElementRef<HTMLCanvasElement>;
+  @ViewChild('arOverlay', { static: true }) overlayRef!: ElementRef<HTMLDivElement>;
 
-  allFossils: FossilLocation[] = fossils as FossilLocation[];
+  /** Signal so fossilDirections computed reacts when fossils are scattered. */
+  allFossils = signal<FossilLocation[]>(fossils as FossilLocation[]);
   collectedIds = new Set<string>();
   selectedFossil: FossilLocation | null = null;
   showMap = false;
@@ -131,18 +143,39 @@ export class ArViewComponent implements OnInit, OnDestroy {
   showLearn = false;
   private fossilsScattered = false;
 
+  /**
+   * Direction + distance to every uncollected fossil (up to 5 closest).
+   * Uses ALL fossils — not just nearby — so the radar guides the player
+   * toward fossils before they're in the 30 m discovery radius.
+   */
+  fossilDirections = computed(() => {
+    const all = this.allFossils();
+    const heading = this.orientation.orientation()?.heading ?? 0;
+    if (!this.gps.playerPosition()) return [];
+
+    return all
+      .filter(f => !this.collectedIds.has(f.id) && !f.discovered)
+      .map(f => {
+        const bearing  = this.gps.bearingTo(f);
+        const relAngle = ((bearing - heading) % 360 + 360) % 360;
+        return { id: f.id, name: f.name, relAngle, distance: Math.round(this.gps.distanceTo(f)) };
+      })
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, 5);
+  });
+
   constructor(
     public arService: ArService,
     public gps: GpsService,
     public orientation: OrientationService
   ) {
-    // Scatter fossils on first GPS fix, then react to nearby changes
     effect(() => {
       const pos = this.gps.playerPosition();
       if (pos && !this.fossilsScattered) {
         this.fossilsScattered = true;
-        this.allFossils = scatterFossils(this.allFossils, pos.lat, pos.lng);
-        this.gps.loadFossils(this.allFossils);
+        const scattered = scatterFossils(this.allFossils(), pos.lat, pos.lng);
+        this.allFossils.set(scattered);
+        this.gps.loadFossils(scattered);
       }
     });
 
@@ -155,15 +188,13 @@ export class ArViewComponent implements OnInit, OnDestroy {
   async ngOnInit(): Promise<void> {
     await this.arService.checkSupport();
     await this.arService.init(this.canvasRef.nativeElement);
-
     this.orientation.start();
     this.gps.startTracking();
   }
 
   async onStartAR(): Promise<void> {
-    // iOS 13+ requires a user-gesture to unlock DeviceOrientationEvent
     await this.orientation.requestPermission();
-    await this.arService.startAR();
+    await this.arService.startAR(this.overlayRef.nativeElement);
   }
 
   onCollect(fossil: FossilLocation): void {
@@ -179,20 +210,14 @@ export class ArViewComponent implements OnInit, OnDestroy {
 
       const distM = this.gps.distanceTo(f);
       const bearing = this.gps.bearingTo(f);
-
-      // Use compass bearing + device heading to place fossil in the correct
-      // real-world direction. Clamp display distance so very far fossils
-      // still show up within arm's reach in AR (they're nearby on GPS but
-      // could be 30 m away — we scale down to 3 m max for readability).
       const arDistM = Math.min(3, distM * 0.1);
       const { x, y, z } = this.orientation.fossilOffset(bearing, arDistM);
 
       this.arService.placeFossil(f.id, new THREE.Vector3(x, y, z));
     });
 
-    // Remove markers no longer nearby
     const nearbyIds = new Set(nearby.map((f) => f.id));
-    this.allFossils.forEach((f) => {
+    this.allFossils().forEach((f) => {
       if (!nearbyIds.has(f.id) && !this.collectedIds.has(f.id)) {
         this.arService.removeFossil(f.id);
       }
