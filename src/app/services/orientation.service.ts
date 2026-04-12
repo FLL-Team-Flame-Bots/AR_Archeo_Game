@@ -1,6 +1,6 @@
 import { Injectable, NgZone, signal } from '@angular/core';
 
-export const DEVICE_HEIGHT_M = 0.9144; // 3 feet in metres
+export const DEVICE_HEIGHT_M = 1.0668; // 3.5 feet in metres
 
 export interface DeviceOrientation {
   heading: number;   // compass direction device faces, 0–360 (north = 0)

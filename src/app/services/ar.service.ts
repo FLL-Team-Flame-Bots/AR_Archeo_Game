@@ -9,6 +9,7 @@ export class ArService {
   private xrSession: XRSession | null = null;
   private fossilMeshes: Map<string, THREE.Mesh> = new Map();
   private animationId: number = 0;
+  private tapHandler?: (fossilId: string) => void;
 
   supported = signal(false);
   active = signal(false);
@@ -35,6 +36,21 @@ export class ArService {
     this.renderer.xr.enabled = true;
     this.renderer.xr.setReferenceSpaceType('local');
 
+    // Non-XR fallback: raycast using touch coords against camera
+    canvas.addEventListener('touchend', (e) => {
+      if (this.xrSession) return;
+      const touch = (e as TouchEvent).changedTouches[0];
+      if (!touch) return;
+      const rect = canvas.getBoundingClientRect();
+      const ndc = new THREE.Vector2(
+        ((touch.clientX - rect.left) / rect.width) * 2 - 1,
+        -((touch.clientY - rect.top) / rect.height) * 2 + 1,
+      );
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(ndc, this.camera);
+      this.checkFossilHit(raycaster.ray.origin, raycaster.ray.direction);
+    }, { passive: true });
+
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
@@ -55,8 +71,6 @@ export class ArService {
     this.loading.set(true);
 
     try {
-      // domOverlay root must be a transparent element that does NOT include the canvas,
-      // otherwise the dark container background blocks the camera feed.
       const sessionInit: Record<string, unknown> = {
         requiredFeatures: [],
         optionalFeatures: ['hit-test', 'dom-overlay'],
@@ -65,9 +79,25 @@ export class ArService {
 
       this.xrSession = await (navigator.xr as any).requestSession('immersive-ar', sessionInit);
 
-      // Must be awaited — session isn't ready to render until this resolves
       await this.renderer.xr.setSession(this.xrSession);
       this.active.set(true);
+
+      // XR screen tap — get the input ray and raycast against fossil hit spheres
+      this.xrSession!.addEventListener('select', (event: Event) => {
+        const xrEvent = event as any; // XRInputSourceEvent
+        const refSpace = this.renderer.xr.getReferenceSpace();
+        if (!refSpace || !xrEvent.frame || !xrEvent.inputSource) return;
+
+        const pose = xrEvent.frame.getPose(xrEvent.inputSource.targetRaySpace, refSpace);
+        if (!pose) return;
+
+        const m = new THREE.Matrix4().fromArray(pose.transform.matrix);
+        const origin = new THREE.Vector3().setFromMatrixPosition(m);
+        const quat = new THREE.Quaternion().setFromRotationMatrix(m);
+        const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(quat).normalize();
+
+        this.checkFossilHit(origin, direction);
+      });
 
       this.xrSession!.addEventListener('end', () => {
         this.ngZone.run(() => {
@@ -104,24 +134,49 @@ export class ArService {
   placeFossil(id: string, position: THREE.Vector3): void {
     if (this.fossilMeshes.has(id)) return;
 
-    // Fossil bone visual — simple geometry placeholder until real models are added
     const group = new THREE.Group();
 
-    const bodyGeo = new THREE.SphereGeometry(0.04, 8, 8);
-    const material = new THREE.MeshStandardMaterial({ color: 0xc8a86b, roughness: 0.8 });
+    // children[0] — visible sphere body
+    const bodyGeo = new THREE.SphereGeometry(0.08, 10, 10);
+    const material = new THREE.MeshStandardMaterial({ color: 0xc8a86b, roughness: 0.6, metalness: 0.2 });
     const body = new THREE.Mesh(bodyGeo, material);
     group.add(body);
 
-    // Glow ring
-    const ringGeo = new THREE.TorusGeometry(0.07, 0.005, 8, 32);
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0.6 });
+    // children[1] — inner glow ring (spins)
+    const ringGeo = new THREE.TorusGeometry(0.13, 0.008, 8, 32);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0.7 });
     const ring = new THREE.Mesh(ringGeo, ringMat);
     ring.rotation.x = Math.PI / 2;
     group.add(ring);
 
+    // children[2] — outer pulse ring
+    const outerGeo = new THREE.TorusGeometry(0.18, 0.004, 8, 32);
+    const outerMat = new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0.3 });
+    const outer = new THREE.Mesh(outerGeo, outerMat);
+    outer.rotation.x = Math.PI / 2;
+    group.add(outer);
+
+    // children[3] — downward cone locator, bobs up/down
+    const coneGeo = new THREE.ConeGeometry(0.03, 0.09, 6);
+    const coneMat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
+    const cone = new THREE.Mesh(coneGeo, coneMat);
+    cone.rotation.z = Math.PI;
+    cone.position.y = 0.24;
+    group.add(cone);
+
+    // children[4] — invisible large hit sphere for tap detection
+    const hitGeo = new THREE.SphereGeometry(0.28, 6, 6);
+    const hitMat = new THREE.MeshBasicMaterial({ visible: false });
+    const hitSphere = new THREE.Mesh(hitGeo, hitMat);
+    group.add(hitSphere);
+
     group.position.copy(position);
     this.scene.add(group);
     this.fossilMeshes.set(id, group as unknown as THREE.Mesh);
+  }
+
+  setTapHandler(fn: (fossilId: string) => void): void {
+    this.tapHandler = fn;
   }
 
   removeFossil(id: string): void {
@@ -132,11 +187,39 @@ export class ArService {
     }
   }
 
+  /** Raycast along origin→direction; fires tapHandler with fossil ID if a fossil is hit. */
+  private checkFossilHit(origin: THREE.Vector3, direction: THREE.Vector3): void {
+    const raycaster = new THREE.Raycaster(origin.clone(), direction.clone().normalize(), 0.01, 20);
+
+    // Map every child object → parent fossil ID for quick lookup after intersection
+    const objectToId = new Map<THREE.Object3D, string>();
+    this.fossilMeshes.forEach((group, id) => {
+      (group as unknown as THREE.Group).traverse(child => objectToId.set(child, id));
+      objectToId.set(group as unknown as THREE.Object3D, id);
+    });
+
+    const targets = Array.from(objectToId.keys());
+    const intersects = raycaster.intersectObjects(targets, false);
+
+    if (intersects.length > 0) {
+      const fossilId = objectToId.get(intersects[0].object);
+      if (fossilId) {
+        this.ngZone.run(() => this.tapHandler?.(fossilId));
+      }
+    }
+  }
+
   private tick(_frame: XRFrame | null): void {
-    // Animate glow rings
+    const t = performance.now() / 1000;
     this.fossilMeshes.forEach((mesh) => {
-      if (mesh.children?.[1]) {
-        mesh.children[1].rotation.z += 0.01;
+      if (mesh.children[1]) mesh.children[1].rotation.z += 0.015;
+      if (mesh.children[2]) {
+        mesh.children[2].rotation.z -= 0.008;
+        const mat = (mesh.children[2] as THREE.Mesh).material as THREE.MeshBasicMaterial;
+        mat.opacity = 0.15 + Math.abs(Math.sin(t * 1.5)) * 0.25;
+      }
+      if (mesh.children[3]) {
+        mesh.children[3].position.y = 0.24 + Math.sin(t * 2.5) * 0.03;
       }
     });
     this.renderer.render(this.scene, this.camera);

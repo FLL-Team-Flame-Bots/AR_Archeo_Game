@@ -11,7 +11,7 @@ export function randomNearbyPoint(
   centerLat: number,
   centerLng: number,
   minMeters = 5,
-  maxMeters = 15
+  maxMeters = 30
 ): { lat: number; lng: number } {
   const distance = minMeters + Math.random() * (maxMeters - minMeters);
   const bearing = Math.random() * 2 * Math.PI; // random compass direction
@@ -47,6 +47,24 @@ export function scatterFossils<T extends { lat: number; lng: number }>(
     if (f.lat !== 0 || f.lng !== 0) return f; // already placed
     const { lat, lng } = randomNearbyPoint(playerLat, playerLng);
     return { ...f, lat, lng };
+  });
+}
+
+/**
+ * Generates `count` fossil instances from template definitions, each placed at
+ * a random nearby position. Instances get unique IDs so the same type can
+ * appear multiple times — enabling endless continuous generation.
+ */
+export function generateFossilInstances<T extends { id: string; lat: number; lng: number; discovered: boolean }>(
+  templates: T[],
+  count: number,
+  playerLat: number,
+  playerLng: number
+): T[] {
+  return Array.from({ length: count }, (_, i) => {
+    const tpl = templates[i % templates.length];
+    const { lat, lng } = randomNearbyPoint(playerLat, playerLng);
+    return { ...tpl, id: `${tpl.id}_${Date.now()}_${i}`, lat, lng, discovered: false };
   });
 }
 

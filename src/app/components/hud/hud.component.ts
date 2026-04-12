@@ -17,8 +17,8 @@ export interface FossilDirection {
       <!-- Top bar -->
       <div class="top-bar">
         <div class="score-badge">
-          <span class="score-label">Fossils</span>
-          <span class="score-value">{{ collected }} / {{ total }}</span>
+          <span class="score-label">Collected</span>
+          <span class="score-value">{{ collected }}</span>
         </div>
         <div class="title">AR Archaeology</div>
         <div class="gps-badge" [class.gps-ok]="gpsActive" [class.gps-error]="!gpsActive">
@@ -29,7 +29,7 @@ export interface FossilDirection {
       <!-- Nearby fossils hint -->
       <div class="nearby-panel" *ngIf="nearbyCount > 0">
         <span class="pulse-dot"></span>
-        {{ nearbyCount }} fossil{{ nearbyCount > 1 ? 's' : '' }} nearby — use radar to locate!
+        {{ nearbyCount }} fossil{{ nearbyCount > 1 ? 's' : '' }} nearby — tap screen to collect!
       </div>
 
       <!-- No GPS / AR prompt -->
@@ -40,51 +40,46 @@ export interface FossilDirection {
         </div>
       </div>
 
-      <!-- ── AR Overlays (only when AR session is active) ── -->
+      <!-- ── AR Overlays ── -->
       <ng-container *ngIf="arActive">
 
-        <!-- Edge direction arrows for off-screen fossils -->
-        <div class="edge-arrow"
-             *ngFor="let f of offScreenFossils; let i = index"
-             [class.arrow-left]="f.side === 'left'"
-             [class.arrow-right]="f.side === 'right'"
-             [class.arrow-behind]="f.side === 'behind'"
-             [style.top]="(120 + i * 72) + 'px'">
-          <div class="arrow-chevron">{{ f.side === 'left' ? '◀' : f.side === 'right' ? '▶' : '▼' }}</div>
-          <div class="arrow-label">{{ f.name }}<br><small>{{ f.distance }}m</small></div>
+        <!-- Edge dots — one per off-screen fossil, size = closeness -->
+        <div class="edge-dot"
+             *ngFor="let f of offScreenFossils; trackBy: trackById"
+             [ngStyle]="f.style"
+             [style.width.px]="f.size"
+             [style.height.px]="f.size">
         </div>
 
-        <!-- Mini radar compass (bottom-right) -->
+        <!-- Mini radar (bottom-right) -->
         <div class="radar-wrap" *ngIf="fossilDirections.length > 0">
           <div class="radar-title">RADAR</div>
           <svg class="radar-svg" viewBox="-50 -50 100 100">
-            <!-- Background -->
-            <circle cx="0" cy="0" r="49" fill="rgba(0,0,0,0.65)" stroke="rgba(255,215,0,0.4)" stroke-width="1"/>
-            <!-- Distance rings: inner = 30 m collect zone, outer = 100 m -->
-            <circle cx="0" cy="0" r="13" fill="none" stroke="rgba(74,222,128,0.4)" stroke-width="0.8" stroke-dasharray="2,2"/>
-            <circle cx="0" cy="0" r="32" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="0.5"/>
-            <text x="14" y="-11" font-size="5" fill="rgba(74,222,128,0.6)">30m</text>
-            <!-- Cardinal lines -->
-            <line x1="0" y1="-48" x2="0" y2="48" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/>
-            <line x1="-48" y1="0" x2="48" y2="0" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/>
-            <!-- Forward arrow (north = ahead) -->
-            <polygon points="0,-45 3,-36 -3,-36" fill="#4ade80" opacity="0.9"/>
-            <text x="0" y="-40" text-anchor="middle" font-size="6" fill="#4ade80" dy="-2">N</text>
-            <!-- Fossil dots -->
-            <ng-container *ngFor="let dot of radarDots">
-              <circle [attr.cx]="dot.x" [attr.cy]="dot.y" r="5" fill="#ffd700" opacity="0.9"/>
-              <text [attr.x]="dot.x" [attr.y]="dot.y - 7"
-                    text-anchor="middle" font-size="7" fill="#ffd700">{{ dot.distance }}m</text>
-            </ng-container>
-            <!-- Player dot -->
-            <circle cx="0" cy="0" r="3" fill="white"/>
+            <circle cx="0" cy="0" r="49" fill="rgba(0,0,0,0.6)" stroke="rgba(255,215,0,0.35)" stroke-width="1"/>
+            <!-- 30 m collect ring -->
+            <circle cx="0" cy="0" r="13" fill="none" stroke="rgba(74,222,128,0.35)" stroke-width="0.8" stroke-dasharray="2,2"/>
+            <circle cx="0" cy="0" r="32" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="0.5"/>
+            <line x1="0" y1="-48" x2="0" y2="48" stroke="rgba(255,255,255,0.07)" stroke-width="0.5"/>
+            <line x1="-48" y1="0" x2="48" y2="0" stroke="rgba(255,255,255,0.07)" stroke-width="0.5"/>
+            <!-- Forward indicator -->
+            <polygon points="0,-45 2.5,-37 -2.5,-37" fill="#4ade80" opacity="0.85"/>
+            <!-- Fossil dots — size encodes closeness, trackBy keeps transitions smooth -->
+            <circle
+              *ngFor="let dot of radarDots; trackBy: trackById"
+              class="fossil-dot"
+              [attr.cx]="dot.x"
+              [attr.cy]="dot.y"
+              [attr.r]="dot.r"
+              fill="#ffd700"/>
+            <!-- Player -->
+            <circle cx="0" cy="0" r="2.5" fill="white"/>
           </svg>
         </div>
 
       </ng-container>
 
       <!-- Version stamp -->
-      <div class="version-stamp">v1.0.0</div>
+      <div class="version-stamp">v1.2.3</div>
 
       <!-- Bottom bar -->
       <div class="bottom-bar">
@@ -102,32 +97,28 @@ export interface FossilDirection {
       padding: 12px 16px; background: linear-gradient(180deg, rgba(0,0,0,0.7) 0%, transparent 100%);
       pointer-events: all;
     }
-
     .score-badge, .gps-badge {
       background: rgba(0,0,0,0.5); border-radius: 20px; padding: 4px 10px;
       font-size: 12px; color: #f5e6c8; font-weight: 600;
     }
     .score-label { display: block; font-size: 9px; text-transform: uppercase; color: #c8a86b; }
     .score-value { display: block; font-size: 16px; font-weight: 700; }
-
-    .gps-ok   { color: #4ade80; }
+    .gps-ok    { color: #4ade80; }
     .gps-error { color: #f87171; }
-
     .title { font-size: 16px; font-weight: 700; color: #f5e6c8; text-shadow: 0 1px 4px rgba(0,0,0,0.8); }
 
     .nearby-panel {
       margin: 8px 16px 0; background: rgba(139,105,20,0.85); color: #fff;
-      padding: 8px 14px; border-radius: 20px; font-size: 13px; font-weight: 600;
+      padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
       display: flex; align-items: center; gap: 8px; pointer-events: all; align-self: flex-start;
     }
-
     .pulse-dot {
-      width: 8px; height: 8px; border-radius: 50%; background: #ffd700;
+      width: 7px; height: 7px; border-radius: 50%; background: #ffd700;
       animation: pulse 1.2s infinite;
     }
     @keyframes pulse {
       0%, 100% { transform: scale(1); opacity: 1; }
-      50% { transform: scale(1.4); opacity: 0.6; }
+      50%       { transform: scale(1.4); opacity: 0.6; }
     }
 
     .center-prompt {
@@ -144,43 +135,38 @@ export interface FossilDirection {
       border-radius: 8px; cursor: pointer;
     }
 
-    /* Edge direction arrows */
-    .edge-arrow {
-      position: fixed; display: flex; align-items: center; gap: 6px;
+    /* Edge dots — pulsing circles, no text, size = closeness */
+    .edge-dot {
+      position: fixed;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #ffe066, #e67e00);
+      box-shadow: 0 0 10px rgba(255,200,0,0.55);
+      transform: translate(-50%, -50%);
       pointer-events: none;
+      animation: edgePulse 1.8s ease-in-out infinite;
+      transition: top 0.45s ease, left 0.45s ease,
+                  right 0.45s ease, bottom 0.45s ease,
+                  width 0.45s ease, height 0.45s ease;
     }
-    .arrow-left  { left: 8px; flex-direction: row; }
-    .arrow-right { right: 8px; flex-direction: row-reverse; }
-    .arrow-behind { bottom: 90px; left: 50%; transform: translateX(-50%); flex-direction: column; align-items: center; }
+    @keyframes edgePulse {
+      0%, 100% { opacity: 0.85; transform: translate(-50%, -50%) scale(1);   }
+      50%       { opacity: 1;    transform: translate(-50%, -50%) scale(1.18); }
+    }
 
-    .arrow-chevron {
-      width: 32px; height: 32px; background: rgba(255,215,0,0.85);
-      border-radius: 50%; display: flex; align-items: center; justify-content: center;
-      font-size: 16px; color: #1a0f00; font-weight: 900;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
-      animation: arrowPulse 1.5s ease-in-out infinite;
-    }
-    @keyframes arrowPulse {
-      0%, 100% { transform: scale(1); }
-      50% { transform: scale(1.15); }
-    }
-    .arrow-label {
-      background: rgba(0,0,0,0.7); border: 1px solid rgba(255,215,0,0.4);
-      border-radius: 8px; padding: 4px 8px; font-size: 11px; color: #f5e6c8;
-      line-height: 1.4; max-width: 80px;
-    }
-    .arrow-label small { color: #ffd700; font-weight: 700; }
-
-    /* Mini radar */
+    /* Radar */
     .radar-wrap {
       position: fixed; bottom: 90px; right: 12px;
       display: flex; flex-direction: column; align-items: center; gap: 2px;
       pointer-events: none;
     }
-    .radar-title {
-      font-size: 9px; color: rgba(255,215,0,0.7); letter-spacing: 2px; font-weight: 700;
+    .radar-title { font-size: 9px; color: rgba(255,215,0,0.6); letter-spacing: 2px; font-weight: 700; }
+    .radar-svg   { width: 90px; height: 90px; }
+
+    /* SVG dot transitions — Chrome supports cx/cy/r via CSS */
+    .fossil-dot {
+      opacity: 0.9;
+      transition: cx 0.4s ease, cy 0.4s ease, r 0.35s ease;
     }
-    .radar-svg { width: 110px; height: 110px; }
 
     /* Bottom bar */
     .bottom-bar {
@@ -197,7 +183,7 @@ export interface FossilDirection {
 
     .version-stamp {
       position: fixed; bottom: 72px; right: 8px;
-      font-size: 10px; color: rgba(255,255,255,0.35);
+      font-size: 10px; color: rgba(255,255,255,0.3);
       pointer-events: none; letter-spacing: 0.5px;
     }
   `]
@@ -211,35 +197,62 @@ export class HudComponent {
   @Input() arActive = false;
   @Input() fossilDirections: FossilDirection[] = [];
 
-  @Output() startAR = new EventEmitter<void>();
-  @Output() openMap = new EventEmitter<void>();
+  @Output() startAR     = new EventEmitter<void>();
+  @Output() openMap     = new EventEmitter<void>();
   @Output() openCollection = new EventEmitter<void>();
-  @Output() openLearn = new EventEmitter<void>();
+  @Output() openLearn   = new EventEmitter<void>();
 
-  /** Fossils positioned on the mini radar SVG (max 200 m shown). */
-  get radarDots(): Array<{ x: number; y: number; distance: number }> {
-    const MAX_DIST = 200;
-    const MAX_R = 44;
-    return this.fossilDirections.map(f => {
-      const r = Math.min(MAX_R, (f.distance / MAX_DIST) * MAX_R);
-      const rad = (f.relAngle * Math.PI) / 180;
+  trackById(_: number, f: { id: string }) { return f.id; }
+
+  /** Radar dots — only fossils within 50 m, size encodes closeness (larger = nearer). */
+  get radarDots(): Array<{ id: string; x: number; y: number; r: number }> {
+    const MAX_DIST = 50, MAX_R = 44;
+    return this.fossilDirections.filter(f => f.distance <= 50).map(f => {
+      const dist  = Math.min(f.distance, MAX_DIST);
+      const pos   = (dist / MAX_DIST) * MAX_R;
+      const rad   = (f.relAngle * Math.PI) / 180;
+      const dotR  = 1 + (1 - dist / MAX_DIST) * 2.5;  // 1 (far) → 3.5 (close)
       return {
-        x: +( r * Math.sin(rad)).toFixed(1),
-        y: +(-r * Math.cos(rad)).toFixed(1),
-        distance: f.distance,
+        id: f.id,
+        x:  +(pos * Math.sin(rad)).toFixed(2),
+        y:  +(-pos * Math.cos(rad)).toFixed(2),
+        r:  +dotR.toFixed(2),
       };
     });
   }
 
-  /** Fossils outside the camera's horizontal field of view (~±50°). */
-  get offScreenFossils(): Array<FossilDirection & { side: 'left' | 'right' | 'behind' }> {
+  /** Edge dots for fossils within 50 m that are outside the camera FOV (~±50°). */
+  get offScreenFossils(): Array<{ id: string; size: number; style: Record<string, string> }> {
     return this.fossilDirections
+      .filter(f => f.distance <= 50)
       .map(f => {
-        const a = f.relAngle > 180 ? f.relAngle - 360 : f.relAngle; // -180..+180
-        const side: 'left' | 'right' | 'behind' =
-          a < -50 ? 'left' : a > 50 ? 'right' : 'behind';
-        return { ...f, normAngle: a, side };
+        const norm = f.relAngle > 180 ? f.relAngle - 360 : f.relAngle; // −180..+180
+        if (Math.abs(norm) <= 50) return null;
+
+        // Dot size: 12 px (200 m away) → 34 px (right next to you)
+        const size = Math.round(12 + (1 - Math.min(f.distance, 200) / 200) * 22);
+
+        // Project bearing onto screen edge
+        const rad  = (f.relAngle * Math.PI) / 180;
+        const sx   = Math.sin(rad);             // +right / −left
+        const sy   = -Math.cos(rad);            // −ahead (top) / +behind (bottom)
+        const absX = Math.abs(sx), absY = Math.abs(sy);
+
+        let style: Record<string, string>;
+        if (absX * 1.8 > absY) {               // hits left or right edge
+          const top = Math.max(12, Math.min(88, 50 + (sy / absX) * 30)) + '%';
+          style = sx > 0
+            ? { right: '14px', top }
+            : { left:  '14px', top };
+        } else {                                // hits top or bottom edge
+          const left = Math.max(12, Math.min(88, 50 + (sx / absY) * 38)) + '%';
+          style = sy > 0
+            ? { bottom: '85px', left }
+            : { top:    '70px', left };
+        }
+
+        return { id: f.id, size, style };
       })
-      .filter(f => Math.abs(f.normAngle) > 50 || f.side === 'behind');
+      .filter((f): f is NonNullable<typeof f> => f !== null);
   }
 }

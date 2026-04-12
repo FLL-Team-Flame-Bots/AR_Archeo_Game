@@ -110,6 +110,8 @@ export class FossilCardComponent {
   }
 
   get fossilEmoji(): string {
+    // Generated IDs are like "trex-skull-01_1715000000000_0" — extract base template ID
+    const baseId = this.fossil.id.split('_')[0];
     const map: Record<string, string> = {
       'trex-skull-01': '🦴',
       'triceratops-horn-01': '🦕',
@@ -117,6 +119,6 @@ export class FossilCardComponent {
       'mammoth-tusk-01': '🦣',
       'shark-tooth-01': '🦈',
     };
-    return map[this.fossil.id] ?? '🪨';
+    return map[baseId] ?? '🪨';
   }
 }
