@@ -1,0 +1,77 @@
+{
+  "configVersion": 1,
+  "timestamp": 1776033825545,
+  "index": "/AR_Archeo_Game/index.html",
+  "assetGroups": [
+    {
+      "name": "app",
+      "installMode": "prefetch",
+      "updateMode": "prefetch",
+      "cacheQueryOptions": {
+        "ignoreVary": true
+      },
+      "urls": [
+        "/AR_Archeo_Game/favicon.ico",
+        "/AR_Archeo_Game/index.html",
+        "/AR_Archeo_Game/main-JBAFCT55.js",
+        "/AR_Archeo_Game/manifest.webmanifest",
+        "/AR_Archeo_Game/styles-2WUX2SJC.css"
+      ],
+      "patterns": []
+    },
+    {
+      "name": "assets",
+      "installMode": "lazy",
+      "updateMode": "prefetch",
+      "cacheQueryOptions": {
+        "ignoreVary": true
+      },
+      "urls": [
+        "/AR_Archeo_Game/icons/icon-128x128.png",
+        "/AR_Archeo_Game/icons/icon-144x144.png",
+        "/AR_Archeo_Game/icons/icon-152x152.png",
+        "/AR_Archeo_Game/icons/icon-192x192.png",
+        "/AR_Archeo_Game/icons/icon-384x384.png",
+        "/AR_Archeo_Game/icons/icon-512x512.png",
+        "/AR_Archeo_Game/icons/icon-72x72.png",
+        "/AR_Archeo_Game/icons/icon-96x96.png"
+      ],
+      "patterns": []
+    }
+  ],
+  "dataGroups": [],
+  "hashTable": {
+    "/AR_Archeo_Game/favicon.ico": "9c39f434fe1261f68c5e3eefdf734630d99c5670",
+    "/AR_Archeo_Game/icons/icon-128x128.png": "f912963bdc6d5a38d8f1dd0afbaab2ce8d657acb",
+    "/AR_Archeo_Game/icons/icon-144x144.png": "b155fd5f2fd5d2ea7760721063003c4cd95fd783",
+    "/AR_Archeo_Game/icons/icon-152x152.png": "eae6e0f0c8afb8aaae339e2a569b43e9238e5e6c",
+    "/AR_Archeo_Game/icons/icon-192x192.png": "15c4180454633880d98674aa7394656196c91584",
+    "/AR_Archeo_Game/icons/icon-384x384.png": "94a915751ef6c9282df9aea405ad679230631814",
+    "/AR_Archeo_Game/icons/icon-512x512.png": "1de182f76f7329dfa8f9fcdd1fdcdd695bea6a99",
+    "/AR_Archeo_Game/icons/icon-72x72.png": "aa88a6096bd973be7f6d7a5489bfa6bc2463f8c4",
+    "/AR_Archeo_Game/icons/icon-96x96.png": "7fb8f59c30ce2ff12c700321a0b39e14b3dc8f95",
+    "/AR_Archeo_Game/index.html": "d1f43559cb2b9572e1cb3c625457a6859675f0d8",
+    "/AR_Archeo_Game/main-JBAFCT55.js": "94e13d18580582afbc8a198d443a35257970473b",
+    "/AR_Archeo_Game/manifest.webmanifest": "bebd7cf52ef51f077758605b8f9a495c70882b98",
+    "/AR_Archeo_Game/styles-2WUX2SJC.css": "07aa2664af6e4d68da311ae8dfe00f5f11725110"
+  },
+  "navigationUrls": [
+    {
+      "positive": true,
+      "regex": "^\\/.*$"
+    },
+    {
+      "positive": false,
+      "regex": "^\\/(?:.+\\/)?[^/]*\\.[^/]*$"
+    },
+    {
+      "positive": false,
+      "regex": "^\\/(?:.+\\/)?[^/]*__[^/]*$"
+    },
+    {
+      "positive": false,
+      "regex": "^\\/(?:.+\\/)?[^/]*__[^/]*\\/.*$"
+    }
+  ],
+  "navigationRequestStrategy": "performance"
+}
