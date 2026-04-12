@@ -1,0 +1,72 @@
+[
+  {
+    "id": "trex-skull-01",
+    "name": "T-Rex Skull Fragment",
+    "species": "Tyrannosaurus rex",
+    "era": "Mesozoic",
+    "period": "Late Cretaceous",
+    "yearDiscovered": 1902,
+    "description": "A fossilized fragment of a Tyrannosaurus rex skull. T-Rex had one of the most powerful bites of any land predator, capable of crushing bone.",
+    "funFact": "T-Rex had tiny arms but enormous legs — it could run up to 12 mph!",
+    "lat": 0,
+    "lng": 0,
+    "discovered": false,
+    "rarity": "legendary"
+  },
+  {
+    "id": "triceratops-horn-01",
+    "name": "Triceratops Horn",
+    "species": "Triceratops horridus",
+    "era": "Mesozoic",
+    "period": "Late Cretaceous",
+    "yearDiscovered": 1889,
+    "description": "One of the three distinctive horns from a Triceratops. These horns could grow up to 1 meter long and were used for defense and display.",
+    "funFact": "Triceratops lived right at the end of the dinosaur era — some individuals may have seen the asteroid impact!",
+    "lat": 0,
+    "lng": 0,
+    "discovered": false,
+    "rarity": "rare"
+  },
+  {
+    "id": "ammonite-01",
+    "name": "Ammonite Shell",
+    "species": "Ammonoidea",
+    "era": "Paleozoic/Mesozoic",
+    "period": "Devonian to Cretaceous",
+    "yearDiscovered": 1800,
+    "description": "A spiral-shelled cephalopod that lived in ancient seas. Ammonites are excellent index fossils — their presence tells geologists the exact age of the rock layer.",
+    "funFact": "Ammonites survived three mass extinctions but were wiped out in the same event that killed the dinosaurs.",
+    "lat": 0,
+    "lng": 0,
+    "discovered": false,
+    "rarity": "common"
+  },
+  {
+    "id": "mammoth-tusk-01",
+    "name": "Woolly Mammoth Tusk",
+    "species": "Mammuthus primigenius",
+    "era": "Cenozoic",
+    "period": "Pleistocene",
+    "yearDiscovered": 1799,
+    "description": "A curved tusk from a woolly mammoth. Mammoths used their tusks to sweep snow away from food and to fight rivals.",
+    "funFact": "Woolly mammoths are so well-preserved in permafrost that scientists have recovered intact DNA — a revival project is underway!",
+    "lat": 0,
+    "lng": 0,
+    "discovered": false,
+    "rarity": "rare"
+  },
+  {
+    "id": "shark-tooth-01",
+    "name": "Megalodon Tooth",
+    "species": "Otodus megalodon",
+    "era": "Cenozoic",
+    "period": "Miocene to Pliocene",
+    "yearDiscovered": 1667,
+    "description": "A massive tooth from Megalodon, the largest shark to ever live. A single tooth could be over 18 cm long — bigger than your hand.",
+    "funFact": "Megalodon is estimated to have been 15-20 meters long. A great white shark could fit in its mouth.",
+    "lat": 0,
+    "lng": 0,
+    "discovered": false,
+    "rarity": "legendary"
+  }
+]
