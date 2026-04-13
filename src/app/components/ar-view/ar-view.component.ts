@@ -214,36 +214,40 @@ export class ArViewComponent implements OnInit, OnDestroy {
     this.gps.loadFossils(this.allFossils());
   }
 
-  /** Despawn fossils beyond DESPAWN_RADIUS_M, then top up to TARGET_DENSITY near the player. */
+  /** Despawn fossils beyond DESPAWN_RADIUS_M, then top up to NEAR_TARGET around the player. */
   private replenishFossils(pos: { lat: number; lng: number }): void {
     const all = this.allFossils();
 
-    // Despawn fossils beyond 100 m
+    // Despawn fossils beyond DESPAWN_RADIUS_M — use pos directly, not GPS signal
     const remaining = all.filter(f => {
-      if (this.gps.distanceTo(f) > DESPAWN_RADIUS_M) {
+      if (this.flatDistM(pos.lat, pos.lng, f.lat, f.lng) > DESPAWN_RADIUS_M) {
         this.arService.removeFossil(f.id);
         return false;
       }
       return true;
     });
 
-    // Count how many fossils are currently near the player
-    const nearCount = remaining.filter(f => this.gps.distanceTo(f) <= SPAWN_ZONE_M).length;
+    // Count how many fossils are within SPAWN_ZONE_M of the player
+    const nearCount = remaining.filter(
+      f => this.flatDistM(pos.lat, pos.lng, f.lat, f.lng) <= SPAWN_ZONE_M
+    ).length;
+
     const needed = remaining.length < MAX_TOTAL
       ? Math.max(0, NEAR_TARGET - nearCount)
       : 0;
 
-    // Spawn fossils only in unused 1 m × 1 m grid cells
     const fresh: FossilLocation[] = [];
-    for (let i = 0; i < needed; i++) {
-      const f = this.spawnInFreshCell(pos.lat, pos.lng, 3, 30);
-      if (f) fresh.push(f);
-    }
 
     // On very first spawn place one fossil 2 m away for easy testing
     if (all.length === 0) {
-      const close = this.spawnInFreshCell(pos.lat, pos.lng, 1, 2);
+      const close = this.trySpawn(pos.lat, pos.lng, 1, 2, remaining, fresh);
       if (close) fresh.unshift(close);
+    }
+
+    // Spawn new fossils, passing already-staged fossils so they exclude each other
+    for (let i = 0; i < needed; i++) {
+      const f = this.trySpawn(pos.lat, pos.lng, 3, 20, remaining, fresh);
+      if (f) fresh.push(f);
     }
 
     if (remaining.length !== all.length || fresh.length > 0) {
@@ -255,21 +259,22 @@ export class ArViewComponent implements OnInit, OnDestroy {
 
   /**
    * Tries up to 30 random positions within minM–maxM of the player.
-   * Rejects positions that are within MIN_FOSSIL_SEP_M of any active fossil,
-   * preventing stacking while allowing respawning in areas once cleared.
+   * Checks against both already-active fossils AND fossils staged in the
+   * current batch (`staged`), so fossils within a single replenish cycle
+   * don't cluster together.
    */
-  private spawnInFreshCell(
+  private trySpawn(
     playerLat: number, playerLng: number,
     minM: number, maxM: number,
+    active: FossilLocation[],
+    staged: FossilLocation[],
   ): FossilLocation | null {
-    const active = this.allFossils();
+    const all = [...active, ...staged];
     for (let attempt = 0; attempt < 30; attempt++) {
       const { lat, lng } = randomNearbyPoint(playerLat, playerLng, minM, maxM);
-      const tooClose = active.some(f => {
-        const dLat = (f.lat - lat) * 111_000;
-        const dLng = (f.lng - lng) * 111_000 * Math.cos(lat * Math.PI / 180);
-        return Math.sqrt(dLat * dLat + dLng * dLng) < MIN_FOSSIL_SEP_M;
-      });
+      const tooClose = all.some(
+        f => this.flatDistM(f.lat, f.lng, lat, lng) < MIN_FOSSIL_SEP_M
+      );
       if (!tooClose) {
         const tpl = this.fossilTemplates[this.spawnCounter % this.fossilTemplates.length];
         this.spawnCounter++;
@@ -277,6 +282,13 @@ export class ArViewComponent implements OnInit, OnDestroy {
       }
     }
     return null;
+  }
+
+  /** Fast flat-earth distance in metres — accurate enough within 200 m. */
+  private flatDistM(lat1: number, lng1: number, lat2: number, lng2: number): number {
+    const dLat = (lat2 - lat1) * 111_000;
+    const dLng = (lng2 - lng1) * 111_000 * Math.cos(lat1 * Math.PI / 180);
+    return Math.sqrt(dLat * dLat + dLng * dLng);
   }
 
   private syncARMarkers(nearby: FossilLocation[]): void {
