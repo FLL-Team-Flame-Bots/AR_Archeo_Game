@@ -22,6 +22,8 @@ export class GpsService {
 
   loadFossils(fossils: FossilLocation[]): void {
     this.fossils = fossils;
+    const pos = this.playerPosition();
+    if (pos) this.updateNearby(pos);
   }
 
   startTracking(): void {
