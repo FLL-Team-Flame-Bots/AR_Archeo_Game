@@ -1,6 +1,6 @@
 {
   "configVersion": 1,
-  "timestamp": 1776038212668,
+  "timestamp": 1776038630999,
   "index": "/AR_Archeo_Game/index.html",
   "assetGroups": [
     {
@@ -41,15 +41,15 @@
   ],
   "dataGroups": [],
   "hashTable": {
-    "/AR_Archeo_Game/favicon.ico": "9c39f434fe1261f68c5e3eefdf734630d99c5670",
-    "/AR_Archeo_Game/icons/icon-128x128.png": "f912963bdc6d5a38d8f1dd0afbaab2ce8d657acb",
-    "/AR_Archeo_Game/icons/icon-144x144.png": "b155fd5f2fd5d2ea7760721063003c4cd95fd783",
-    "/AR_Archeo_Game/icons/icon-152x152.png": "eae6e0f0c8afb8aaae339e2a569b43e9238e5e6c",
-    "/AR_Archeo_Game/icons/icon-192x192.png": "15c4180454633880d98674aa7394656196c91584",
-    "/AR_Archeo_Game/icons/icon-384x384.png": "94a915751ef6c9282df9aea405ad679230631814",
-    "/AR_Archeo_Game/icons/icon-512x512.png": "1de182f76f7329dfa8f9fcdd1fdcdd695bea6a99",
-    "/AR_Archeo_Game/icons/icon-72x72.png": "aa88a6096bd973be7f6d7a5489bfa6bc2463f8c4",
-    "/AR_Archeo_Game/icons/icon-96x96.png": "7fb8f59c30ce2ff12c700321a0b39e14b3dc8f95",
+    "/AR_Archeo_Game/favicon.ico": "0317231da590d85adae638ebb879e85f13207ee7",
+    "/AR_Archeo_Game/icons/icon-128x128.png": "b1763b847625e2ae2528373f47dffe998de13907",
+    "/AR_Archeo_Game/icons/icon-144x144.png": "6e037ffc7bdb6bc4932f70195d459b047c27bc2f",
+    "/AR_Archeo_Game/icons/icon-152x152.png": "a48f9804be77a0165f231403bdad62b6afb7de11",
+    "/AR_Archeo_Game/icons/icon-192x192.png": "521182751a758035a6453050a0300e36bb2d42a3",
+    "/AR_Archeo_Game/icons/icon-384x384.png": "70ada38b5525197272f9d2ed114e82b11d6aacbf",
+    "/AR_Archeo_Game/icons/icon-512x512.png": "8cc7b4290b668f1c6b22a551bd48ec54aa9457b1",
+    "/AR_Archeo_Game/icons/icon-72x72.png": "9a3b902f2564097c269c16d5ad2d693a7a7e3942",
+    "/AR_Archeo_Game/icons/icon-96x96.png": "65d9580d61f1d547102cd63e0ebe09ddc0adc445",
     "/AR_Archeo_Game/index.html": "548e34b5be458cc415090972cee4e39f2e09136c",
     "/AR_Archeo_Game/main-33RZTANH.js": "b80b9e08f2bc9d2e3fcf3445fddbe49f86c6adac",
     "/AR_Archeo_Game/manifest.webmanifest": "bebd7cf52ef51f077758605b8f9a495c70882b98",
