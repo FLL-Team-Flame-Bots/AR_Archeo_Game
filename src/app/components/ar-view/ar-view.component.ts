@@ -13,7 +13,7 @@ import { OrientationService } from '../../services/orientation.service';
 import fossilTemplates from '../../data/fossils.json';
 
 /** Target number of fossils kept within 100 m of the player at all times. */
-const TARGET_DENSITY = 10;
+const TARGET_DENSITY = 25;
 /** Fossils beyond this distance are despawned to free memory. */
 const DESPAWN_RADIUS_M = 100;
 

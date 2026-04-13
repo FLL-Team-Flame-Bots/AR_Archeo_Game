@@ -10,8 +10,8 @@ const EARTH_RADIUS_M = 6371000;
 export function randomNearbyPoint(
   centerLat: number,
   centerLng: number,
-  minMeters = 5,
-  maxMeters = 30
+  minMeters = 3,
+  maxMeters = 20
 ): { lat: number; lng: number } {
   const distance = minMeters + Math.random() * (maxMeters - minMeters);
   const bearing = Math.random() * 2 * Math.PI; // random compass direction
