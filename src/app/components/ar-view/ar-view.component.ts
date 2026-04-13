@@ -8,7 +8,7 @@ import { GpsService } from '../../services/gps.service';
 import { FossilLocation } from '../../data/fossil.model';
 import { FossilCardComponent } from '../fossil-card/fossil-card.component';
 import { HudComponent } from '../hud/hud.component';
-import { generateFossilInstances, randomNearbyPoint } from '../../utils/geo.utils';
+import { randomNearbyPoint } from '../../utils/geo.utils';
 import { OrientationService } from '../../services/orientation.service';
 import fossilTemplates from '../../data/fossils.json';
 
@@ -145,6 +145,10 @@ export class ArViewComponent implements OnInit, OnDestroy {
   showCollection = false;
   showLearn = false;
 
+  /** 1 m × 1 m grid cells that have already had a fossil this session. */
+  private usedCells = new Set<string>();
+  private spawnCounter = 0;
+
   /** Bearing + distance to every active uncollected fossil, for the HUD radar/arrows. */
   fossilDirections = computed(() => {
     const all     = this.allFossils();
@@ -223,22 +227,23 @@ export class ArViewComponent implements OnInit, OnDestroy {
       return true;
     });
 
-    // Spawn based on how many are NEAR the player, not total pool size.
-    // This ensures new fossils appear whenever the player enters a new area,
-    // even if old (distant) fossils haven't despawned yet.
+    // Count how many fossils are currently near the player
     const nearCount = remaining.filter(f => this.gps.distanceTo(f) <= SPAWN_ZONE_M).length;
     const needed = remaining.length < MAX_TOTAL
       ? Math.max(0, NEAR_TARGET - nearCount)
       : 0;
 
-    let fresh = needed > 0
-      ? generateFossilInstances(this.fossilTemplates, needed, pos.lat, pos.lng)
-      : [];
+    // Spawn fossils only in unused 1 m × 1 m grid cells
+    const fresh: FossilLocation[] = [];
+    for (let i = 0; i < needed; i++) {
+      const f = this.spawnInFreshCell(pos.lat, pos.lng, 3, 30);
+      if (f) fresh.push(f);
+    }
 
     // On very first spawn place one fossil 2 m away for easy testing
-    if (all.length === 0 && fresh.length > 0) {
-      const { lat, lng } = randomNearbyPoint(pos.lat, pos.lng, 1, 2);
-      fresh = [{ ...fresh[0], lat, lng }, ...fresh.slice(1)];
+    if (all.length === 0) {
+      const close = this.spawnInFreshCell(pos.lat, pos.lng, 1, 2);
+      if (close) fresh.unshift(close);
     }
 
     if (remaining.length !== all.length || fresh.length > 0) {
@@ -246,6 +251,34 @@ export class ArViewComponent implements OnInit, OnDestroy {
       this.allFossils.set(updated);
       this.gps.loadFossils(updated);
     }
+  }
+
+  /**
+   * Tries up to 30 random positions within minM–maxM of the player.
+   * Returns a fossil instance only if its 1 m² cell hasn't been used yet.
+   */
+  private spawnInFreshCell(
+    playerLat: number, playerLng: number,
+    minM: number, maxM: number,
+  ): FossilLocation | null {
+    for (let attempt = 0; attempt < 30; attempt++) {
+      const { lat, lng } = randomNearbyPoint(playerLat, playerLng, minM, maxM);
+      const key = this.cellKey(lat, lng);
+      if (!this.usedCells.has(key)) {
+        this.usedCells.add(key);
+        const tpl = this.fossilTemplates[this.spawnCounter % this.fossilTemplates.length];
+        this.spawnCounter++;
+        return { ...tpl, id: `${tpl.id}_${Date.now()}_${this.spawnCounter}`, lat, lng, discovered: false };
+      }
+    }
+    return null; // all nearby cells already used this session
+  }
+
+  /** Converts lat/lng to a 1 m × 1 m grid cell key. */
+  private cellKey(lat: number, lng: number): string {
+    const mLat = Math.floor(lat * 111_000);
+    const mLng = Math.floor(lng * 111_000 * Math.cos(lat * Math.PI / 180));
+    return `${mLat}:${mLng}`;
   }
 
   private syncARMarkers(nearby: FossilLocation[]): void {
