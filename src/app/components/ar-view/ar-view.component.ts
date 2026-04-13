@@ -8,7 +8,7 @@ import { GpsService } from '../../services/gps.service';
 import { FossilLocation } from '../../data/fossil.model';
 import { FossilCardComponent } from '../fossil-card/fossil-card.component';
 import { HudComponent } from '../hud/hud.component';
-import { generateFossilInstances } from '../../utils/geo.utils';
+import { generateFossilInstances, randomNearbyPoint } from '../../utils/geo.utils';
 import { OrientationService } from '../../services/orientation.service';
 import fossilTemplates from '../../data/fossils.json';
 
@@ -218,9 +218,16 @@ export class ArViewComponent implements OnInit, OnDestroy {
     });
 
     const needed = Math.max(0, TARGET_DENSITY - remaining.length);
-    const fresh = needed > 0
+    let fresh = needed > 0
       ? generateFossilInstances(this.fossilTemplates, needed, pos.lat, pos.lng)
       : [];
+
+    // On very first spawn (pool was empty), place one fossil 2 m away so it's
+    // immediately visible for testing — makes it easy to verify tap + brush works
+    if (all.length === 0 && fresh.length > 0) {
+      const { lat, lng } = randomNearbyPoint(pos.lat, pos.lng, 1, 2);
+      fresh = [{ ...fresh[0], lat, lng }, ...fresh.slice(1)];
+    }
 
     if (remaining.length !== all.length || fresh.length > 0) {
       const updated = [...remaining, ...fresh];
