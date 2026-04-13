@@ -12,8 +12,8 @@ import { randomNearbyPoint } from '../../utils/geo.utils';
 import { OrientationService } from '../../services/orientation.service';
 import fossilTemplates from '../../data/fossils.json';
 
-/** How many fossils to keep within SPAWN_ZONE_M of the player (~1 per 5 m). */
-const NEAR_TARGET = 6;
+/** How many fossils to keep within SPAWN_ZONE_M of the player. */
+const NEAR_TARGET = 15;
 /** Radius used when counting "nearby" fossils for spawn decisions. */
 const SPAWN_ZONE_M = 30;
 /** Hard cap on total pool size to prevent unbounded growth. */
