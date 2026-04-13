@@ -339,11 +339,18 @@ export class FossilCardComponent implements AfterViewInit {
   get fossilEmoji(): string {
     const baseId = this.fossil.id.split('_')[0];
     const map: Record<string, string> = {
-      'trex-skull-01':       '🦴',
-      'triceratops-horn-01': '🦕',
-      'ammonite-01':         '🐚',
-      'mammoth-tusk-01':     '🦣',
-      'shark-tooth-01':      '🦈',
+      'flint-handaxe-01':      '🪓',
+      'bone-needle-01':        '🪡',
+      'clay-pot-shard-01':     '🏺',
+      'bronze-fibula-01':      '📌',
+      'roman-coin-01':         '🪙',
+      'obsidian-arrowhead-01': '🏹',
+      'golden-torc-01':        '📿',
+      'clay-tablet-01':        '📜',
+      'iron-dagger-01':        '🗡️',
+      'human-femur-01':        '🦴',
+      'wooden-post-01':        '🪵',
+      'ivory-necklace-01':     '💛',
     };
     return map[baseId] ?? '🪨';
   }
