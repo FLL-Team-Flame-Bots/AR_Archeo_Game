@@ -12,8 +12,12 @@ import { generateFossilInstances, randomNearbyPoint } from '../../utils/geo.util
 import { OrientationService } from '../../services/orientation.service';
 import fossilTemplates from '../../data/fossils.json';
 
-/** Target number of fossils kept within 100 m of the player at all times. */
-const TARGET_DENSITY = 25;
+/** How many fossils to keep within SPAWN_ZONE_M of the player. */
+const NEAR_TARGET = 10;
+/** Radius used when counting "nearby" fossils for spawn decisions. */
+const SPAWN_ZONE_M = 30;
+/** Hard cap on total pool size to prevent unbounded growth. */
+const MAX_TOTAL = 60;
 /** Fossils beyond this distance are despawned to free memory. */
 const DESPAWN_RADIUS_M = 100;
 
@@ -209,6 +213,8 @@ export class ArViewComponent implements OnInit, OnDestroy {
   /** Despawn fossils beyond DESPAWN_RADIUS_M, then top up to TARGET_DENSITY near the player. */
   private replenishFossils(pos: { lat: number; lng: number }): void {
     const all = this.allFossils();
+
+    // Despawn fossils beyond 100 m
     const remaining = all.filter(f => {
       if (this.gps.distanceTo(f) > DESPAWN_RADIUS_M) {
         this.arService.removeFossil(f.id);
@@ -217,13 +223,19 @@ export class ArViewComponent implements OnInit, OnDestroy {
       return true;
     });
 
-    const needed = Math.max(0, TARGET_DENSITY - remaining.length);
+    // Spawn based on how many are NEAR the player, not total pool size.
+    // This ensures new fossils appear whenever the player enters a new area,
+    // even if old (distant) fossils haven't despawned yet.
+    const nearCount = remaining.filter(f => this.gps.distanceTo(f) <= SPAWN_ZONE_M).length;
+    const needed = remaining.length < MAX_TOTAL
+      ? Math.max(0, NEAR_TARGET - nearCount)
+      : 0;
+
     let fresh = needed > 0
       ? generateFossilInstances(this.fossilTemplates, needed, pos.lat, pos.lng)
       : [];
 
-    // On very first spawn (pool was empty), place one fossil 2 m away so it's
-    // immediately visible for testing — makes it easy to verify tap + brush works
+    // On very first spawn place one fossil 2 m away for easy testing
     if (all.length === 0 && fresh.length > 0) {
       const { lat, lng } = randomNearbyPoint(pos.lat, pos.lng, 1, 2);
       fresh = [{ ...fresh[0], lat, lng }, ...fresh.slice(1)];
