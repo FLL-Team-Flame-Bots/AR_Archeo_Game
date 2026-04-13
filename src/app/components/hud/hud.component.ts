@@ -56,9 +56,9 @@ export interface FossilDirection {
           <div class="radar-title">RADAR</div>
           <svg class="radar-svg" viewBox="-50 -50 100 100">
             <circle cx="0" cy="0" r="49" fill="rgba(0,0,0,0.6)" stroke="rgba(255,215,0,0.35)" stroke-width="1"/>
-            <!-- 30 m collect ring -->
-            <circle cx="0" cy="0" r="13" fill="none" stroke="rgba(74,222,128,0.35)" stroke-width="0.8" stroke-dasharray="2,2"/>
-            <circle cx="0" cy="0" r="32" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="0.5"/>
+            <!-- 5 m ring, 10 m edge ring -->
+            <circle cx="0" cy="0" r="22" fill="none" stroke="rgba(74,222,128,0.3)" stroke-width="0.8" stroke-dasharray="2,2"/>
+            <circle cx="0" cy="0" r="44" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="0.5"/>
             <line x1="0" y1="-48" x2="0" y2="48" stroke="rgba(255,255,255,0.07)" stroke-width="0.5"/>
             <line x1="-48" y1="0" x2="48" y2="0" stroke="rgba(255,255,255,0.07)" stroke-width="0.5"/>
             <!-- Forward indicator -->
@@ -79,7 +79,7 @@ export interface FossilDirection {
       </ng-container>
 
       <!-- Version stamp -->
-      <div class="version-stamp">v2.1.2</div>
+      <div class="version-stamp">v2.1.3</div>
 
       <!-- Bottom bar -->
       <div class="bottom-bar">
@@ -204,10 +204,10 @@ export class HudComponent {
 
   trackById(_: number, f: { id: string }) { return f.id; }
 
-  /** Radar dots — only fossils within 50 m, size encodes closeness (larger = nearer). */
+  /** Radar dots — only fossils within 10 m, max 10, size encodes closeness. */
   get radarDots(): Array<{ id: string; x: number; y: number; r: number }> {
-    const MAX_DIST = 50, MAX_R = 44;
-    return this.fossilDirections.filter(f => f.distance <= 50).map(f => {
+    const MAX_DIST = 10, MAX_R = 44;
+    return this.fossilDirections.filter(f => f.distance <= 10).slice(0, 10).map(f => {
       const dist  = Math.min(f.distance, MAX_DIST);
       const pos   = (dist / MAX_DIST) * MAX_R;
       const rad   = (f.relAngle * Math.PI) / 180;
@@ -221,10 +221,10 @@ export class HudComponent {
     });
   }
 
-  /** Edge dots for fossils within 50 m that are outside the camera FOV (~±50°). */
+  /** Edge dots for fossils within 10 m that are outside the camera FOV (~±50°). */
   get offScreenFossils(): Array<{ id: string; size: number; style: Record<string, string> }> {
     return this.fossilDirections
-      .filter(f => f.distance <= 50)
+      .filter(f => f.distance <= 10)
       .map(f => {
         const norm = f.relAngle > 180 ? f.relAngle - 360 : f.relAngle; // −180..+180
         if (Math.abs(norm) <= 50) return null;

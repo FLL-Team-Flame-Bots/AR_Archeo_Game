@@ -159,7 +159,7 @@ export class ArViewComponent implements OnInit, OnDestroy {
       .filter(f => !this.collectedIds.has(f.id) && !f.discovered)
       .map(f => {
         const bearing  = this.gps.bearingTo(f);
-        const relAngle = ((bearing - heading) % 360 + 360) % 360;
+        const relAngle = ((heading - bearing) % 360 + 360) % 360;
         return { id: f.id, name: f.name, relAngle, distance: Math.round(this.gps.distanceTo(f)) };
       })
       .sort((a, b) => a.distance - b.distance);
