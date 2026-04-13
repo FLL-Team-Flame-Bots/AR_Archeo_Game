@@ -13,15 +13,15 @@ import { OrientationService } from '../../services/orientation.service';
 import fossilTemplates from '../../data/fossils.json';
 
 /** How many fossils to keep within SPAWN_ZONE_M of the player. */
-const NEAR_TARGET = 8;
+const NEAR_TARGET = 3;
 /** Radius used when counting "nearby" fossils for spawn decisions. */
-const SPAWN_ZONE_M = 15;
+const SPAWN_ZONE_M = 8;
 /** Hard cap on total pool size to prevent unbounded growth. */
-const MAX_TOTAL = 60;
+const MAX_TOTAL = 40;
 /** Fossils beyond this distance are despawned to free memory. */
-const DESPAWN_RADIUS_M = 50;
+const DESPAWN_RADIUS_M = 20;
 /** Minimum metres between any two fossils. */
-const MIN_FOSSIL_SEP_M = 2;
+const MIN_FOSSIL_SEP_M = 3;
 
 @Component({
   selector: 'app-ar-view',
@@ -246,7 +246,7 @@ export class ArViewComponent implements OnInit, OnDestroy {
 
     // Spawn new fossils, passing already-staged fossils so they exclude each other
     for (let i = 0; i < needed; i++) {
-      const f = this.trySpawn(pos.lat, pos.lng, 3, 20, remaining, fresh);
+      const f = this.trySpawn(pos.lat, pos.lng, 5, 12, remaining, fresh);
       if (f) fresh.push(f);
     }
 
