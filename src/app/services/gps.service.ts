@@ -48,7 +48,7 @@ export class GpsService {
           this.error.set(`GPS error: ${err.message}`);
         });
       },
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
     );
   }
 
