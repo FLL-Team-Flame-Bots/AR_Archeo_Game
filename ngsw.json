@@ -1,6 +1,6 @@
 {
   "configVersion": 1,
-  "timestamp": 1776038971471,
+  "timestamp": 1776046116805,
   "index": "/AR_Archeo_Game/index.html",
   "assetGroups": [
     {
@@ -13,7 +13,7 @@
       "urls": [
         "/AR_Archeo_Game/favicon.ico",
         "/AR_Archeo_Game/index.html",
-        "/AR_Archeo_Game/main-UDBBXCQD.js",
+        "/AR_Archeo_Game/main-SKKVKXCF.js",
         "/AR_Archeo_Game/manifest.webmanifest",
         "/AR_Archeo_Game/styles-2WUX2SJC.css"
       ],
@@ -50,8 +50,8 @@
     "/AR_Archeo_Game/icons/icon-512x512.png": "8cc7b4290b668f1c6b22a551bd48ec54aa9457b1",
     "/AR_Archeo_Game/icons/icon-72x72.png": "9a3b902f2564097c269c16d5ad2d693a7a7e3942",
     "/AR_Archeo_Game/icons/icon-96x96.png": "65d9580d61f1d547102cd63e0ebe09ddc0adc445",
-    "/AR_Archeo_Game/index.html": "4bc0d9aa2948111018bf40af8da94eec394cad1a",
-    "/AR_Archeo_Game/main-UDBBXCQD.js": "51d01d8260694372b8a981f72d30e3f6b659d86f",
+    "/AR_Archeo_Game/index.html": "65b79502da53e31f87ecc6abbbc5448b99450fa3",
+    "/AR_Archeo_Game/main-SKKVKXCF.js": "afdf4bda84190c7c6bf28a94f996675cb33fe892",
     "/AR_Archeo_Game/manifest.webmanifest": "bebd7cf52ef51f077758605b8f9a495c70882b98",
     "/AR_Archeo_Game/styles-2WUX2SJC.css": "07aa2664af6e4d68da311ae8dfe00f5f11725110"
   },
