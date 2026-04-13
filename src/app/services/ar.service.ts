@@ -170,7 +170,14 @@ export class ArService {
     const hitSphere = new THREE.Mesh(hitGeo, hitMat);
     group.add(hitSphere);
 
-    group.position.copy(position);
+    // position is a camera-relative offset; convert to world space by adding
+    // the camera's current position so fossils are anchored to the real world,
+    // not to the AR session origin.
+    group.position.set(
+      this.camera.position.x + position.x,
+      position.y,
+      this.camera.position.z + position.z,
+    );
     this.scene.add(group);
     this.fossilMeshes.set(id, group as unknown as THREE.Mesh);
   }
