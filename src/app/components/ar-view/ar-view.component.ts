@@ -13,13 +13,15 @@ import { OrientationService } from '../../services/orientation.service';
 import fossilTemplates from '../../data/fossils.json';
 
 /** How many fossils to keep within SPAWN_ZONE_M of the player. */
-const NEAR_TARGET = 15;
+const NEAR_TARGET = 8;
 /** Radius used when counting "nearby" fossils for spawn decisions. */
-const SPAWN_ZONE_M = 30;
+const SPAWN_ZONE_M = 15;
 /** Hard cap on total pool size to prevent unbounded growth. */
 const MAX_TOTAL = 60;
 /** Fossils beyond this distance are despawned to free memory. */
-const DESPAWN_RADIUS_M = 100;
+const DESPAWN_RADIUS_M = 50;
+/** Minimum metres between any two fossils. */
+const MIN_FOSSIL_SEP_M = 2;
 
 @Component({
   selector: 'app-ar-view',
@@ -145,8 +147,6 @@ export class ArViewComponent implements OnInit, OnDestroy {
   showCollection = false;
   showLearn = false;
 
-  /** 1 m × 1 m grid cells that have already had a fossil this session. */
-  private usedCells = new Set<string>();
   private spawnCounter = 0;
 
   /** Bearing + distance to every active uncollected fossil, for the HUD radar/arrows. */
@@ -255,43 +255,28 @@ export class ArViewComponent implements OnInit, OnDestroy {
 
   /**
    * Tries up to 30 random positions within minM–maxM of the player.
-   * Returns a fossil only if its 1 m² cell — and all 8 neighbouring cells —
-   * are free, guaranteeing at least ~1 m between any two fossils.
+   * Rejects positions that are within MIN_FOSSIL_SEP_M of any active fossil,
+   * preventing stacking while allowing respawning in areas once cleared.
    */
   private spawnInFreshCell(
     playerLat: number, playerLng: number,
     minM: number, maxM: number,
   ): FossilLocation | null {
+    const active = this.allFossils();
     for (let attempt = 0; attempt < 30; attempt++) {
       const { lat, lng } = randomNearbyPoint(playerLat, playerLng, minM, maxM);
-      const key = this.cellKey(lat, lng);
-      if (!this.usedCells.has(key)) {
-        // Mark the cell AND its 8 neighbours → 3×3 m exclusion zone
-        this.markCellAndNeighbors(lat, lng);
+      const tooClose = active.some(f => {
+        const dLat = (f.lat - lat) * 111_000;
+        const dLng = (f.lng - lng) * 111_000 * Math.cos(lat * Math.PI / 180);
+        return Math.sqrt(dLat * dLat + dLng * dLng) < MIN_FOSSIL_SEP_M;
+      });
+      if (!tooClose) {
         const tpl = this.fossilTemplates[this.spawnCounter % this.fossilTemplates.length];
         this.spawnCounter++;
         return { ...tpl, id: `${tpl.id}_${Date.now()}_${this.spawnCounter}`, lat, lng, discovered: false };
       }
     }
     return null;
-  }
-
-  /** Marks a 3×3 grid of cells around (lat, lng) as used. */
-  private markCellAndNeighbors(lat: number, lng: number): void {
-    const mLat = Math.floor(lat * 111_000);
-    const mLng = Math.floor(lng * 111_000 * Math.cos(lat * Math.PI / 180));
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        this.usedCells.add(`${mLat + dy}:${mLng + dx}`);
-      }
-    }
-  }
-
-  /** Converts lat/lng to a 1 m × 1 m grid cell key. */
-  private cellKey(lat: number, lng: number): string {
-    const mLat = Math.floor(lat * 111_000);
-    const mLng = Math.floor(lng * 111_000 * Math.cos(lat * Math.PI / 180));
-    return `${mLat}:${mLng}`;
   }
 
   private syncARMarkers(nearby: FossilLocation[]): void {
