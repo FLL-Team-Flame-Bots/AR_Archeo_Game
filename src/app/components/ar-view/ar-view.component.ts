@@ -255,7 +255,8 @@ export class ArViewComponent implements OnInit, OnDestroy {
 
   /**
    * Tries up to 30 random positions within minM–maxM of the player.
-   * Returns a fossil instance only if its 1 m² cell hasn't been used yet.
+   * Returns a fossil only if its 1 m² cell — and all 8 neighbouring cells —
+   * are free, guaranteeing at least ~1 m between any two fossils.
    */
   private spawnInFreshCell(
     playerLat: number, playerLng: number,
@@ -265,13 +266,25 @@ export class ArViewComponent implements OnInit, OnDestroy {
       const { lat, lng } = randomNearbyPoint(playerLat, playerLng, minM, maxM);
       const key = this.cellKey(lat, lng);
       if (!this.usedCells.has(key)) {
-        this.usedCells.add(key);
+        // Mark the cell AND its 8 neighbours → 3×3 m exclusion zone
+        this.markCellAndNeighbors(lat, lng);
         const tpl = this.fossilTemplates[this.spawnCounter % this.fossilTemplates.length];
         this.spawnCounter++;
         return { ...tpl, id: `${tpl.id}_${Date.now()}_${this.spawnCounter}`, lat, lng, discovered: false };
       }
     }
-    return null; // all nearby cells already used this session
+    return null;
+  }
+
+  /** Marks a 3×3 grid of cells around (lat, lng) as used. */
+  private markCellAndNeighbors(lat: number, lng: number): void {
+    const mLat = Math.floor(lat * 111_000);
+    const mLng = Math.floor(lng * 111_000 * Math.cos(lat * Math.PI / 180));
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        this.usedCells.add(`${mLat + dy}:${mLng + dx}`);
+      }
+    }
   }
 
   /** Converts lat/lng to a 1 m × 1 m grid cell key. */
