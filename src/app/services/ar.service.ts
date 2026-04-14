@@ -128,7 +128,7 @@ export class ArService {
     if (this.xrSession) {
       await this.xrSession.end();
     }
-    this.renderer.setAnimationLoop(null);
+    if (this.renderer) this.renderer.setAnimationLoop(null);
   }
 
   placeFossil(id: string, position: THREE.Vector3): void {
@@ -190,6 +190,13 @@ export class ArService {
     const mesh = this.fossilMeshes.get(id);
     if (mesh) {
       this.scene.remove(mesh);
+      (mesh as unknown as THREE.Group).traverse(obj => {
+        const m = obj as THREE.Mesh;
+        if (m.geometry) m.geometry.dispose();
+        const mat = m.material as THREE.Material | THREE.Material[] | undefined;
+        if (Array.isArray(mat)) mat.forEach(x => x.dispose());
+        else if (mat) mat.dispose();
+      });
       this.fossilMeshes.delete(id);
     }
   }

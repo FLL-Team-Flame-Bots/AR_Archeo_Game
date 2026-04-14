@@ -4,8 +4,8 @@ const EARTH_RADIUS_M = 6371000;
  * Returns a random lat/lng offset from a center point.
  * @param centerLat  - player latitude
  * @param centerLng  - player longitude
- * @param minMeters  - minimum distance from player (default 30m so it's not right underfoot)
- * @param maxMeters  - maximum distance from player (default 150m — short walk away)
+ * @param minMeters  - minimum distance from player (default 3m so it's not right underfoot)
+ * @param maxMeters  - maximum distance from player (default 30m — short walk away)
  */
 export function randomNearbyPoint(
   centerLat: number,
