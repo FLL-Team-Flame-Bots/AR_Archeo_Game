@@ -1,7 +1,7 @@
 {
   "configVersion": 1,
-  "timestamp": 1776211502950,
-  "index": "/AR_Archeo_Game/index.html",
+  "timestamp": 1776211578938,
+  "index": "/index.html",
   "assetGroups": [
     {
       "name": "app",
@@ -11,11 +11,11 @@
         "ignoreVary": true
       },
       "urls": [
-        "/AR_Archeo_Game/favicon.ico",
-        "/AR_Archeo_Game/index.html",
-        "/AR_Archeo_Game/main-RCNRYYM4.js",
-        "/AR_Archeo_Game/manifest.webmanifest",
-        "/AR_Archeo_Game/styles-2WUX2SJC.css"
+        "/favicon.ico",
+        "/index.html",
+        "/main-RCNRYYM4.js",
+        "/manifest.webmanifest",
+        "/styles-2WUX2SJC.css"
       ],
       "patterns": []
     },
@@ -27,33 +27,33 @@
         "ignoreVary": true
       },
       "urls": [
-        "/AR_Archeo_Game/icons/icon-128x128.png",
-        "/AR_Archeo_Game/icons/icon-144x144.png",
-        "/AR_Archeo_Game/icons/icon-152x152.png",
-        "/AR_Archeo_Game/icons/icon-192x192.png",
-        "/AR_Archeo_Game/icons/icon-384x384.png",
-        "/AR_Archeo_Game/icons/icon-512x512.png",
-        "/AR_Archeo_Game/icons/icon-72x72.png",
-        "/AR_Archeo_Game/icons/icon-96x96.png"
+        "/icons/icon-128x128.png",
+        "/icons/icon-144x144.png",
+        "/icons/icon-152x152.png",
+        "/icons/icon-192x192.png",
+        "/icons/icon-384x384.png",
+        "/icons/icon-512x512.png",
+        "/icons/icon-72x72.png",
+        "/icons/icon-96x96.png"
       ],
       "patterns": []
     }
   ],
   "dataGroups": [],
   "hashTable": {
-    "/AR_Archeo_Game/favicon.ico": "0317231da590d85adae638ebb879e85f13207ee7",
-    "/AR_Archeo_Game/icons/icon-128x128.png": "b1763b847625e2ae2528373f47dffe998de13907",
-    "/AR_Archeo_Game/icons/icon-144x144.png": "6e037ffc7bdb6bc4932f70195d459b047c27bc2f",
-    "/AR_Archeo_Game/icons/icon-152x152.png": "a48f9804be77a0165f231403bdad62b6afb7de11",
-    "/AR_Archeo_Game/icons/icon-192x192.png": "521182751a758035a6453050a0300e36bb2d42a3",
-    "/AR_Archeo_Game/icons/icon-384x384.png": "70ada38b5525197272f9d2ed114e82b11d6aacbf",
-    "/AR_Archeo_Game/icons/icon-512x512.png": "8cc7b4290b668f1c6b22a551bd48ec54aa9457b1",
-    "/AR_Archeo_Game/icons/icon-72x72.png": "9a3b902f2564097c269c16d5ad2d693a7a7e3942",
-    "/AR_Archeo_Game/icons/icon-96x96.png": "65d9580d61f1d547102cd63e0ebe09ddc0adc445",
-    "/AR_Archeo_Game/index.html": "d69f02ad9e01cce2f3d82a4be5d3e7cbd5ec89b7",
-    "/AR_Archeo_Game/main-RCNRYYM4.js": "d87ac7b6c7deeb9dba372fd060d4448266efb3ce",
-    "/AR_Archeo_Game/manifest.webmanifest": "bebd7cf52ef51f077758605b8f9a495c70882b98",
-    "/AR_Archeo_Game/styles-2WUX2SJC.css": "07aa2664af6e4d68da311ae8dfe00f5f11725110"
+    "/favicon.ico": "0317231da590d85adae638ebb879e85f13207ee7",
+    "/icons/icon-128x128.png": "b1763b847625e2ae2528373f47dffe998de13907",
+    "/icons/icon-144x144.png": "6e037ffc7bdb6bc4932f70195d459b047c27bc2f",
+    "/icons/icon-152x152.png": "a48f9804be77a0165f231403bdad62b6afb7de11",
+    "/icons/icon-192x192.png": "521182751a758035a6453050a0300e36bb2d42a3",
+    "/icons/icon-384x384.png": "70ada38b5525197272f9d2ed114e82b11d6aacbf",
+    "/icons/icon-512x512.png": "8cc7b4290b668f1c6b22a551bd48ec54aa9457b1",
+    "/icons/icon-72x72.png": "9a3b902f2564097c269c16d5ad2d693a7a7e3942",
+    "/icons/icon-96x96.png": "65d9580d61f1d547102cd63e0ebe09ddc0adc445",
+    "/index.html": "9a203901987922ffa9968552a10e737bb7e6bbd4",
+    "/main-RCNRYYM4.js": "d87ac7b6c7deeb9dba372fd060d4448266efb3ce",
+    "/manifest.webmanifest": "bebd7cf52ef51f077758605b8f9a495c70882b98",
+    "/styles-2WUX2SJC.css": "07aa2664af6e4d68da311ae8dfe00f5f11725110"
   },
   "navigationUrls": [
     {
