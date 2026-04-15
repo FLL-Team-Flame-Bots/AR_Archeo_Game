@@ -26,9 +26,9 @@ const MIN_FOSSIL_SEP_M = 8;
 const SPAWN_MIN_M = 5;
 const SPAWN_MAX_M = 30;
 /** Grid cell size (m) used to cap fossils per area — forces walking. */
-const AREA_CELL_M = 30;
+const AREA_CELL_M = 10;
 /** Max fossils ever spawnable within a single AREA_CELL_M grid cell. */
-const MAX_PER_AREA = 7;
+const MAX_PER_AREA = 1;
 
 @Component({
   selector: 'app-ar-view',
