@@ -18,7 +18,7 @@ const AREA_CELL_M = 10;
 const ACTIVE_RADIUS_CELLS = 1;
 /** Player must be within this many metres of a fossil's GPS location to
  *  open its card. Stops you grabbing fossils from across the field. */
-const COLLECT_RADIUS_M = 1;
+const COLLECT_RADIUS_M = 5;
 
 @Component({
   selector: 'app-ar-view',
