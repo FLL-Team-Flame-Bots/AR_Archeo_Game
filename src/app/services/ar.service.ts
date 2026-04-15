@@ -1,5 +1,6 @@
 import { Injectable, NgZone, signal } from '@angular/core';
 import * as THREE from 'three';
+import { DEVICE_HEIGHT_M } from './orientation.service';
 
 @Injectable({ providedIn: 'root' })
 export class ArService {
@@ -10,6 +11,11 @@ export class ArService {
   private fossilMeshes: Map<string, THREE.Mesh> = new Map();
   private animationId: number = 0;
   private tapHandler?: (fossilId: string) => void;
+
+  /** Live ground height (y, in XR local space) sampled each frame via hit-test.
+   *  Null until the first hit succeeds; fallback is -DEVICE_HEIGHT_M. */
+  private groundY: number | null = null;
+  private hitTestSource: XRHitTestSource | null = null;
 
   supported = signal(false);
   active = signal(false);
@@ -72,8 +78,8 @@ export class ArService {
 
     try {
       const sessionInit: Record<string, unknown> = {
-        requiredFeatures: [],
-        optionalFeatures: ['hit-test', 'dom-overlay'],
+        requiredFeatures: ['hit-test'],
+        optionalFeatures: ['dom-overlay'],
       };
       if (overlayRoot) sessionInit['domOverlay'] = { root: overlayRoot };
 
@@ -81,6 +87,23 @@ export class ArService {
 
       await this.renderer.xr.setSession(this.xrSession);
       this.active.set(true);
+
+      // Request a persistent hit-test source that fires a ray straight down
+      // from the viewer each frame — we use the hit's y as the live ground level.
+      try {
+        const viewerSpace = await this.xrSession.requestReferenceSpace('viewer');
+        const XRRayCtor = (window as unknown as { XRRay: new (init: object) => object }).XRRay;
+        const downRay = new XRRayCtor({
+          origin:    { x: 0, y: 0, z: 0, w: 1 },
+          direction: { x: 0, y: -1, z: 0, w: 0 },
+        });
+        this.hitTestSource = await (this.xrSession as unknown as {
+          requestHitTestSource: (opts: { space: XRSpace; offsetRay: object }) => Promise<XRHitTestSource>;
+        }).requestHitTestSource({ space: viewerSpace, offsetRay: downRay });
+      } catch {
+        // Hit-test unavailable — fossils will use the fallback height instead.
+        this.hitTestSource = null;
+      }
 
       // XR screen tap — get the input ray and raycast against fossil hit spheres
       this.xrSession!.addEventListener('select', (event: Event) => {
@@ -104,6 +127,8 @@ export class ArService {
           this.active.set(false);
           this.loading.set(false);
           this.xrSession = null;
+          this.hitTestSource = null;
+          this.groundY = null;
         });
       });
 
@@ -172,10 +197,12 @@ export class ArService {
 
     // position is a camera-relative offset; convert to world space by adding
     // the camera's current position so fossils are anchored to the real world,
-    // not to the AR session origin.
+    // not to the AR session origin. Y comes from the live ground hit-test
+    // when available, falling back to the caller's y (usually -deviceHeight).
+    const y = this.groundY ?? position.y;
     group.position.set(
       this.camera.position.x + position.x,
-      position.y,
+      y,
       this.camera.position.z + position.z,
     );
     this.scene.add(group);
@@ -223,9 +250,36 @@ export class ArService {
     }
   }
 
-  private tick(_frame: XRFrame | null): void {
+  private tick(frame: XRFrame | null): void {
     const t = performance.now() / 1000;
+
+    // Sample the ground below the viewer each frame via WebXR hit-test.
+    if (frame && this.hitTestSource) {
+      const refSpace = this.renderer.xr.getReferenceSpace();
+      if (refSpace) {
+        const hits = (frame as unknown as {
+          getHitTestResults: (src: XRHitTestSource) => { getPose: (s: XRReferenceSpace) => XRPose | null }[];
+        }).getHitTestResults(this.hitTestSource);
+        if (hits.length > 0) {
+          const pose = hits[0].getPose(refSpace);
+          if (pose) this.groundY = pose.transform.position.y;
+        }
+      }
+    }
+
+    // Keep fossils seated on the ground. A fossil adopts the current ground
+    // height only when the player is within UPDATE_GROUND_R_M of it, so a
+    // fossil on flat grass doesn't jump when the player walks up a hill.
+    const currentGround   = this.groundY ?? -DEVICE_HEIGHT_M;
+    const UPDATE_GROUND_R = 4; // metres
+
     this.fossilMeshes.forEach((mesh) => {
+      const g = mesh as unknown as THREE.Group;
+      const dx = g.position.x - this.camera.position.x;
+      const dz = g.position.z - this.camera.position.z;
+      if (dx * dx + dz * dz < UPDATE_GROUND_R * UPDATE_GROUND_R) {
+        g.position.y = currentGround;
+      }
       if (mesh.children[1]) mesh.children[1].rotation.z += 0.015;
       if (mesh.children[2]) {
         mesh.children[2].rotation.z -= 0.008;
