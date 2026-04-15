@@ -24,7 +24,7 @@ jobs:
         run: npm ci
 
       - name: Build
-        run: npx ng build --configuration production --base-href /AR_Archeo_Game/
+        run: npx ng build --configuration production --base-href /
 
       - name: Deploy
         uses: JamesIves/github-pages-deploy-action@v4
@@ -32,3 +32,4 @@ jobs:
           folder: dist/AR_Archeo_Game/browser
           branch: gh-pages
           clean: true
+          cname: ar.flamebots.org
