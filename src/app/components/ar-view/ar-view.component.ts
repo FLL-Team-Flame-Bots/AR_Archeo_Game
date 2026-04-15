@@ -13,7 +13,7 @@ import { OrientationService } from '../../services/orientation.service';
 import fossilTemplates from '../../data/fossils.json';
 
 /** How many fossils to keep within SPAWN_ZONE_M of the player. */
-const NEAR_TARGET = 3;
+const NEAR_TARGET = 5;
 /** Radius used when counting "nearby" fossils for spawn decisions. */
 const SPAWN_ZONE_M = 30;
 /** Hard cap on total pool size to prevent unbounded growth. */
@@ -28,7 +28,7 @@ const SPAWN_MAX_M = 30;
 /** Grid cell size (m) used to cap fossils per area — forces walking. */
 const AREA_CELL_M = 30;
 /** Max fossils ever spawnable within a single AREA_CELL_M grid cell. */
-const MAX_PER_AREA = 5;
+const MAX_PER_AREA = 7;
 
 @Component({
   selector: 'app-ar-view',
