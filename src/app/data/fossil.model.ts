@@ -10,6 +10,6 @@ export interface FossilLocation {
   lat: number;
   lng: number;
   discovered: boolean;
-  rarity: 'common' | 'rare' | 'legendary';
+  rarity: 'common' | 'rare' | 'legendary' | 'chroma';
   imageUrl?: string;
 }

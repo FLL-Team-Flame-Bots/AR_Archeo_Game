@@ -20,6 +20,21 @@ const ACTIVE_RADIUS_CELLS = 1;
  *  open its card. Stops you grabbing fossils from across the field. */
 const COLLECT_RADIUS_M = 5;
 
+/** Per-spawn rarity probabilities. Sum to 1. */
+const RARITY_WEIGHTS: Record<string, number> = {
+  chroma:    0.0001,  // 0.01%
+  legendary: 0.01,    // 1%
+  rare:      0.25,    // 25%
+  common:    0.7399,  // ~74%
+};
+/** Score awarded when a fossil of each rarity is collected. */
+const RARITY_POINTS: Record<string, number> = {
+  common:    1,
+  rare:      5,
+  legendary: 50,
+  chroma:    1000,
+};
+
 @Component({
   selector: 'app-ar-view',
   standalone: true,
@@ -65,7 +80,7 @@ const COLLECT_RADIUS_M = 5;
           [fossilDirections]="fossilDirections()"
           (startAR)="onStartAR()"
           (openMap)="showMap = true"
-          (openCollection)="showCollection = true"
+          (openCollection)="showCollection.set(true)"
           (openLearn)="showLearn = true"
         />
 
@@ -85,6 +100,48 @@ const COLLECT_RADIUS_M = 5;
 
         <!-- "Too far to collect" toast -->
         <div class="too-far-toast" *ngIf="tooFarToast()">{{ tooFarToast() }}</div>
+
+        <!-- Collection screen -->
+        <div class="overlay-backdrop" *ngIf="showCollection()" (click)="showCollection.set(false)">
+          <div class="collection-panel" (click)="$event.stopPropagation()">
+            <div class="collection-header">
+              <div>
+                <div class="collection-title">Your Collection</div>
+                <div class="collection-score">Score: <strong>{{ score() }}</strong></div>
+              </div>
+              <button class="close-btn" (click)="showCollection.set(false)">✕</button>
+            </div>
+            <div class="collection-body">
+              <p class="collection-empty" *ngIf="collectionGrouped.length === 0">
+                No fossils yet — go find some!
+              </p>
+              <div class="collection-item" *ngFor="let g of collectionGrouped"
+                   [class]="'rarity-' + g.rarity">
+                <span class="collection-emoji">{{ g.emoji }}</span>
+                <div class="collection-meta">
+                  <div class="collection-name">{{ g.name }}</div>
+                  <div class="collection-rarity">{{ g.rarity }} · {{ pointsFor(g.rarity) }} pt</div>
+                </div>
+                <span class="collection-count" *ngIf="g.count > 1">×{{ g.count }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Celebration overlay (legendary / chroma) -->
+        <div class="celebration" *ngIf="celebrating() as f"
+             [class.celebration-chroma]="f.rarity === 'chroma'">
+          <div class="celebration-confetti">
+            <span *ngFor="let i of confettiPieces">{{ confettiEmoji(f.rarity) }}</span>
+          </div>
+          <div class="celebration-text">
+            <div class="celebration-banner">
+              {{ f.rarity === 'chroma' ? '⟡ CHROMA ⟡' : 'LEGENDARY!' }}
+            </div>
+            <div class="celebration-name">{{ f.name }}</div>
+            <div class="celebration-points">+{{ pointsFor(f.rarity) }} points</div>
+          </div>
+        </div>
 
         <!-- Floor-detection debug readout (only while AR is active) -->
         <div class="floor-debug" *ngIf="arService.active()">
@@ -167,6 +224,127 @@ const COLLECT_RADIUS_M = 5;
       animation: toastIn 0.18s ease-out;
     }
     @keyframes toastIn { from { opacity: 0; transform: translate(-50%, -45%); } to { opacity: 1; transform: translate(-50%, -50%); } }
+
+    /* Collection panel */
+    .collection-panel {
+      background: linear-gradient(145deg, #2a1a00, #3d2a00);
+      border: 2px solid #8B6914; border-radius: 16px;
+      color: #f5e6c8; max-width: 380px; width: 92vw;
+      max-height: 80vh; display: flex; flex-direction: column;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+    }
+    .collection-header {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      padding: 14px 18px; border-bottom: 1px solid rgba(139,105,20,0.4);
+    }
+    .collection-title { font-size: 18px; font-weight: 700; color: #ffd700; }
+    .collection-score { font-size: 13px; color: #c8a86b; margin-top: 2px; }
+    .collection-score strong { color: #ffd700; font-size: 16px; margin-left: 4px; }
+    .collection-body { padding: 12px 14px 18px; overflow-y: auto; }
+    .collection-empty { text-align: center; color: rgba(200,168,107,0.6); padding: 24px 0; }
+    .collection-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 8px 12px; margin-bottom: 6px; border-radius: 10px;
+      background: rgba(0,0,0,0.25); border-left: 3px solid #6b7280;
+    }
+    .collection-item.rarity-rare      { border-left-color: #a855f7; }
+    .collection-item.rarity-legendary { border-left-color: #ffd700; background: rgba(255,215,0,0.1); }
+    .collection-item.rarity-chroma {
+      border-left: 3px solid transparent;
+      background:
+        rgba(0,0,0,0.4) padding-box,
+        linear-gradient(90deg, #ff0040, #ffe000, #00e060, #00c0ff, #ff00d0) border-box;
+      animation: chromaSpin 6s linear infinite;
+    }
+    .collection-emoji { font-size: 26px; }
+    .collection-meta { flex: 1; }
+    .collection-name { font-size: 14px; font-weight: 600; }
+    .collection-rarity { font-size: 11px; color: #c8a86b; text-transform: capitalize; }
+    .collection-count {
+      font-size: 13px; font-weight: 700; color: #ffd700;
+      background: rgba(255,215,0,0.15); padding: 3px 8px; border-radius: 10px;
+    }
+    .close-btn {
+      background: none; border: none; color: #f5e6c8;
+      font-size: 18px; cursor: pointer; padding: 4px; line-height: 1;
+    }
+    @keyframes chromaSpin { to { filter: hue-rotate(360deg); } }
+
+    /* Celebration overlay */
+    .celebration {
+      position: fixed; inset: 0; z-index: 200;
+      pointer-events: none; overflow: hidden;
+      background: radial-gradient(circle at center, rgba(255,215,0,0.25), transparent 60%);
+      animation: celebFade 2.6s ease-out forwards;
+    }
+    .celebration.celebration-chroma {
+      background: radial-gradient(circle at center,
+        rgba(255,0,150,0.35), rgba(0,200,255,0.25), transparent 70%);
+      animation: celebFadeChroma 4.4s ease-out forwards;
+    }
+    @keyframes celebFade {
+      0%, 70% { opacity: 1; } 100% { opacity: 0; }
+    }
+    @keyframes celebFadeChroma {
+      0%, 80% { opacity: 1; } 100% { opacity: 0; }
+    }
+    .celebration-confetti { position: absolute; inset: 0; }
+    .celebration-confetti span {
+      position: absolute; top: 50%; left: 50%;
+      font-size: 28px; opacity: 0;
+      animation: confettiFly 1.6s ease-out forwards;
+    }
+    .celebration-confetti span:nth-child(1)  { --a:   0deg; animation-delay: 0s; }
+    .celebration-confetti span:nth-child(2)  { --a:  15deg; animation-delay: 0.02s; }
+    .celebration-confetti span:nth-child(3)  { --a:  30deg; animation-delay: 0.04s; }
+    .celebration-confetti span:nth-child(4)  { --a:  45deg; animation-delay: 0.06s; }
+    .celebration-confetti span:nth-child(5)  { --a:  60deg; animation-delay: 0.08s; }
+    .celebration-confetti span:nth-child(6)  { --a:  75deg; animation-delay: 0.10s; }
+    .celebration-confetti span:nth-child(7)  { --a:  90deg; animation-delay: 0.12s; }
+    .celebration-confetti span:nth-child(8)  { --a: 105deg; animation-delay: 0.14s; }
+    .celebration-confetti span:nth-child(9)  { --a: 120deg; animation-delay: 0.16s; }
+    .celebration-confetti span:nth-child(10) { --a: 135deg; animation-delay: 0.18s; }
+    .celebration-confetti span:nth-child(11) { --a: 150deg; animation-delay: 0.20s; }
+    .celebration-confetti span:nth-child(12) { --a: 165deg; animation-delay: 0.22s; }
+    .celebration-confetti span:nth-child(13) { --a: 180deg; animation-delay: 0.24s; }
+    .celebration-confetti span:nth-child(14) { --a: 195deg; animation-delay: 0.26s; }
+    .celebration-confetti span:nth-child(15) { --a: 210deg; animation-delay: 0.28s; }
+    .celebration-confetti span:nth-child(16) { --a: 225deg; animation-delay: 0.30s; }
+    .celebration-confetti span:nth-child(17) { --a: 240deg; animation-delay: 0.32s; }
+    .celebration-confetti span:nth-child(18) { --a: 255deg; animation-delay: 0.34s; }
+    .celebration-confetti span:nth-child(19) { --a: 270deg; animation-delay: 0.36s; }
+    .celebration-confetti span:nth-child(20) { --a: 285deg; animation-delay: 0.38s; }
+    .celebration-confetti span:nth-child(21) { --a: 300deg; animation-delay: 0.40s; }
+    .celebration-confetti span:nth-child(22) { --a: 315deg; animation-delay: 0.42s; }
+    .celebration-confetti span:nth-child(23) { --a: 330deg; animation-delay: 0.44s; }
+    .celebration-confetti span:nth-child(24) { --a: 345deg; animation-delay: 0.46s; }
+    @keyframes confettiFly {
+      0%   { opacity: 0; transform: translate(-50%, -50%) rotate(var(--a)) translateY(0)    rotate(0); }
+      15%  { opacity: 1; }
+      100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--a)) translateY(-260px) rotate(720deg); }
+    }
+    .celebration-text {
+      position: absolute; top: 38%; left: 50%; transform: translate(-50%, -50%);
+      text-align: center; color: #fff;
+      text-shadow: 0 0 18px rgba(255,215,0,0.8), 0 2px 8px rgba(0,0,0,0.7);
+      animation: celebPop 0.6s cubic-bezier(.2,1.6,.4,1) forwards;
+    }
+    .celebration-banner {
+      font-size: 38px; font-weight: 900; letter-spacing: 4px;
+      color: #ffd700;
+    }
+    .celebration.celebration-chroma .celebration-banner {
+      background: linear-gradient(90deg, #ff0040, #ffe000, #00e060, #00c0ff, #ff00d0);
+      -webkit-background-clip: text; background-clip: text;
+      color: transparent;
+      animation: chromaSpin 1.6s linear infinite;
+    }
+    .celebration-name { font-size: 18px; margin-top: 6px; font-weight: 700; }
+    .celebration-points { font-size: 16px; margin-top: 4px; color: #ffe066; font-weight: 700; }
+    @keyframes celebPop {
+      0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+      100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    }
     .floor-debug {
       position: fixed; top: 58px; left: 12px;
       background: rgba(0,0,0,0.6); color: #f5e6c8;
@@ -198,9 +376,19 @@ export class ArViewComponent implements OnInit, OnDestroy {
   /** Live pool of active (uncollected) fossils. Starts empty; filled on first GPS fix. */
   allFossils = signal<FossilLocation[]>([]);
   collectedIds = new Set<string>();
+  /** Every fossil the player has collected, in collection order. */
+  collectedFossils = signal<FossilLocation[]>([]);
+  /** Total points earned. Each rarity contributes RARITY_POINTS. */
+  score = computed(() =>
+    this.collectedFossils().reduce((s, f) => s + (RARITY_POINTS[f.rarity] ?? 0), 0)
+  );
   selectedFossil = signal<FossilLocation | null>(null);
+  /** Set briefly after collecting a legendary or chroma fossil — drives the
+   *  celebration overlay. */
+  celebrating = signal<FossilLocation | null>(null);
+  private celebrateTimeout = 0;
   showMap = false;
-  showCollection = false;
+  showCollection = signal(false);
   showLearn = false;
 
   private spawnCounter = 0;
@@ -367,6 +555,7 @@ export class ArViewComponent implements OnInit, OnDestroy {
 
   onCollect(fossil: FossilLocation): void {
     this.collectedIds.add(fossil.id);
+    this.collectedFossils.update(list => [...list, fossil]);
     const rec = this.cellStates.get(this.cellKey(fossil.lat, fossil.lng));
     if (rec) rec.collected.add(fossil.id);
     this.arService.removeFossil(fossil.id);
@@ -374,6 +563,46 @@ export class ArViewComponent implements OnInit, OnDestroy {
 
     this.allFossils.update(list => list.filter(f => f.id !== fossil.id));
     this.gps.loadFossils(this.allFossils());
+
+    // Celebrate legendary and chroma drops with an overlay.
+    if (fossil.rarity === 'legendary' || fossil.rarity === 'chroma') {
+      this.celebrating.set(fossil);
+      clearTimeout(this.celebrateTimeout);
+      this.celebrateTimeout = window.setTimeout(
+        () => this.celebrating.set(null),
+        fossil.rarity === 'chroma' ? 4500 : 2800,
+      );
+    }
+  }
+
+  /** Collected fossils grouped by template id, with count + rarity. */
+  get collectionGrouped(): Array<{ baseId: string; name: string; rarity: string; count: number; emoji: string }> {
+    const map = new Map<string, { baseId: string; name: string; rarity: string; count: number; emoji: string }>();
+    for (const f of this.collectedFossils()) {
+      const baseId = f.id.split('_')[0];
+      const existing = map.get(baseId);
+      if (existing) existing.count++;
+      else map.set(baseId, { baseId, name: f.name, rarity: f.rarity, count: 1, emoji: this.emojiFor(baseId) });
+    }
+    const order: Record<string, number> = { chroma: 0, legendary: 1, rare: 2, common: 3 };
+    return [...map.values()].sort((a, b) => (order[a.rarity] ?? 9) - (order[b.rarity] ?? 9));
+  }
+
+  pointsFor(rarity: string): number { return RARITY_POINTS[rarity] ?? 0; }
+  confettiPieces = Array.from({ length: 24 }, (_, i) => i);
+  confettiEmoji(rarity: string): string {
+    return rarity === 'chroma' ? '🌈' : '✨';
+  }
+
+  private emojiFor(baseId: string): string {
+    const m: Record<string, string> = {
+      'flint-handaxe-01': '🪓', 'bone-needle-01': '🪡', 'clay-pot-shard-01': '🏺',
+      'bronze-fibula-01': '📌', 'roman-coin-01': '🪙', 'obsidian-arrowhead-01': '🏹',
+      'golden-torc-01': '📿', 'clay-tablet-01': '📜', 'iron-dagger-01': '🗡️',
+      'human-femur-01': '🦴', 'wooden-post-01': '🪵', 'ivory-necklace-01': '💛',
+      'iridescent-prism-01': '🌈',
+    };
+    return m[baseId] ?? '🪨';
   }
 
   /** Maintains the (2*ACTIVE_RADIUS_CELLS+1)² ring of cells around the player.
@@ -420,14 +649,29 @@ export class ArViewComponent implements OnInit, OnDestroy {
     return { fossils, collected: new Set() };
   }
 
-  /** Picks a position somewhere inside the cell (not flush against an edge)
-   *  and creates a fossil instance from the next template in rotation. */
+  /** Picks a position somewhere inside the cell (not flush against an edge),
+   *  rolls a rarity by weight, and picks a random template of that rarity. */
   private spawnInCell(cLat: number, cLng: number, step: number): FossilLocation {
     const lat = (cLat + 0.2 + Math.random() * 0.6) * step;
     const lng = (cLng + 0.2 + Math.random() * 0.6) * step;
-    const tpl = this.fossilTemplates[this.spawnCounter % this.fossilTemplates.length];
+    const rarity = this.pickRarity();
+    const candidates = this.fossilTemplates.filter(t => t.rarity === rarity);
+    const tpl = candidates.length
+      ? candidates[Math.floor(Math.random() * candidates.length)]
+      : this.fossilTemplates[0];
     this.spawnCounter++;
     return { ...tpl, id: `${tpl.id}_${Date.now()}_${this.spawnCounter}`, lat, lng, discovered: false };
+  }
+
+  /** Weighted random rarity pick honouring RARITY_WEIGHTS. */
+  private pickRarity(): string {
+    const r = Math.random();
+    let cum = 0;
+    for (const [rarity, w] of Object.entries(RARITY_WEIGHTS)) {
+      cum += w;
+      if (r < cum) return rarity;
+    }
+    return 'common';
   }
 
   /** Grid key for the cell containing a given lat/lng. */

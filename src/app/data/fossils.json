@@ -166,5 +166,19 @@
     "lng": 0,
     "discovered": false,
     "rarity": "legendary"
+  },
+  {
+    "id": "iridescent-prism-01",
+    "name": "Iridescent Prism",
+    "species": "Geological Anomaly",
+    "era": "Unknown",
+    "period": "Undatable",
+    "yearDiscovered": 2024,
+    "description": "A flawless crystal that splits sunlight into colours that have no name. Every spectrometer that examines it produces a different reading. No one knows where it came from or how it formed.",
+    "funFact": "Reportedly, no two photographs of an Iridescent Prism ever look the same — even taken seconds apart, in the same light.",
+    "lat": 0,
+    "lng": 0,
+    "discovered": false,
+    "rarity": "chroma"
   }
 ]

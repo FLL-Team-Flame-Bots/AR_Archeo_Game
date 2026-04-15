@@ -163,6 +163,17 @@ import { FossilLocation } from '../../data/fossil.model';
     .rarity-legendary { border-color: #ffd700; box-shadow: 0 0 20px rgba(255,215,0,0.3); }
     .rarity-rare      { border-color: #a855f7; box-shadow: 0 0 20px rgba(168,85,247,0.3); }
     .rarity-common    { border-color: #6b7280; }
+    .rarity-chroma {
+      border: 2px solid transparent;
+      background:
+        linear-gradient(145deg, #2a1a00, #3d2a00) padding-box,
+        conic-gradient(from 0deg,
+          #ff0040, #ff8000, #ffe000, #00e060, #00c0ff, #6040ff, #ff00d0, #ff0040
+        ) border-box;
+      box-shadow: 0 0 35px rgba(255,255,255,0.55), 0 0 70px rgba(255,0,200,0.45);
+      animation: chromaSpin 6s linear infinite;
+    }
+    @keyframes chromaSpin { to { filter: hue-rotate(360deg); } }
 
     .fossil-icon { font-size: 48px; text-align: center; margin: 8px 0; }
     .fossil-name { font-size: 20px; font-weight: 700; text-align: center; margin: 0 0 4px; }
@@ -333,7 +344,9 @@ export class FossilCardComponent implements AfterViewInit {
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   get rarityLabel(): string {
-    return ({ common: 'Common', rare: 'Rare', legendary: 'Legendary' } as Record<string, string>)[this.fossil.rarity] ?? this.fossil.rarity;
+    return ({
+      common: 'Common', rare: 'Rare', legendary: 'Legendary', chroma: '⟡ CHROMA ⟡',
+    } as Record<string, string>)[this.fossil.rarity] ?? this.fossil.rarity;
   }
 
   get fossilEmoji(): string {
@@ -351,6 +364,7 @@ export class FossilCardComponent implements AfterViewInit {
       'human-femur-01':        '🦴',
       'wooden-post-01':        '🪵',
       'ivory-necklace-01':     '💛',
+      'iridescent-prism-01':   '🌈',
     };
     return map[baseId] ?? '🪨';
   }
