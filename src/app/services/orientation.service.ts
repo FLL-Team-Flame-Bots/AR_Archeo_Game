@@ -13,10 +13,28 @@ export class OrientationService {
   orientation = signal<DeviceOrientation | null>(null);
   permissionDenied = signal(false);
 
+  /** Heading captured at AR session start. WebXR's world-space axes are
+   *  anchored to whatever direction the device was facing at that moment,
+   *  so all subsequent compass-to-XR projections must use this as their
+   *  reference — not the live heading — or fossils placed at different
+   *  times end up in different "frames" and visually cluster wherever the
+   *  player happened to be facing. */
+  headingReference = signal<number | null>(null);
+
   private bound!: (e: DeviceOrientationEvent) => void;
   private boundEvent: 'deviceorientationabsolute' | 'deviceorientation' = 'deviceorientation';
 
   constructor(private ngZone: NgZone) {}
+
+  /** Lock in the current heading as the world-space reference. Call once
+   *  AR has started AND the orientation signal has a real reading. */
+  captureHeadingReference(): boolean {
+    const o = this.orientation();
+    if (!o) return false;
+    this.headingReference.set(o.heading);
+    return true;
+  }
+  clearHeadingReference(): void { this.headingReference.set(null); }
 
   /** Call this on a user gesture (button tap) — required on iOS 13+ */
   async requestPermission(): Promise<boolean> {
@@ -82,29 +100,29 @@ export class OrientationService {
   }
 
   /**
-   * Given a compass bearing to a fossil and a distance in metres,
-   * returns a THREE.js-compatible {x, y, z} offset from the camera origin.
+   * Given a compass bearing to a fossil and a distance in metres, returns
+   * a THREE.js-compatible {x, y, z} offset in WebXR world space.
    *
-   *  - x: left (negative) / right (positive) relative to device facing
+   * Uses the locked-in heading reference (captured at AR start) rather than
+   * the live heading, so every fossil placed during the session lands in
+   * the same world-XR frame — even ones placed seconds apart while the
+   * player was rotating.
+   *
+   *  - x: world-XR east(+) / west(–) relative to session origin
    *  - y: fixed at -deviceHeightM so fossils sit on the ground
-   *  - z: negative = in front of camera, positive = behind
+   *  - z: world-XR south(+) / north(–) relative to session origin
    */
   fossilOffset(
     compassBearingDeg: number,
     distanceM: number,
     deviceHeightM = DEVICE_HEIGHT_M
   ): { x: number; y: number; z: number } {
-    const o = this.orientation();
-    const heading = o?.heading ?? 0;
-
-    // Angle of fossil relative to the direction the device is currently facing
-    const relDeg = compassBearingDeg - heading;
-    const relRad = (relDeg * Math.PI) / 180;
-
+    const ref = this.headingReference() ?? this.orientation()?.heading ?? 0;
+    const relRad = ((compassBearingDeg - ref) * Math.PI) / 180;
     return {
       x: distanceM * Math.sin(relRad),
-      y: -deviceHeightM,                     // ground level
-      z: -distanceM * Math.cos(relRad),       // negative Z = forward in THREE.js
+      y: -deviceHeightM,
+      z: -distanceM * Math.cos(relRad),
     };
   }
 }

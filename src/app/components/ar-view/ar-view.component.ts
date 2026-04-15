@@ -265,18 +265,16 @@ export class ArViewComponent implements OnInit, OnDestroy {
     this.lastGridKey = key;
 
     const RING = 2; // cells on each side → (2*2+1)² = 25 cells
-    const heading = this.orientation.orientation()?.heading ?? 0;
+    // Use the locked-in heading reference so the grid sits in the same
+    // world-XR frame as the fossils (which also use the reference).
+    const headingRef = this.orientation.headingReference()
+      ?? this.orientation.orientation()?.heading ?? 0;
     const segs: { x1: number; z1: number; x2: number; z2: number }[] = [];
 
     const project = (lat: number, lng: number): { x: number; z: number } => {
-      // Local equirectangular projection — accurate within the player's
-      // immediate area. Convert metres east/north into XR-relative XZ, taking
-      // the player's compass heading into account so the lines stay aligned
-      // with real-world north as the player turns.
       const dN = (lat - pos.lat) * 111_000;
       const dE = (lng - pos.lng) * 111_000 * Math.cos(pos.lat * Math.PI / 180);
-      const headRad = (heading * Math.PI) / 180;
-      // Rotate (E, N) by -heading into camera-relative axes, then map to (X, -Z).
+      const headRad = (headingRef * Math.PI) / 180;
       const x = dE * Math.cos(headRad) - dN * Math.sin(headRad);
       const z = -(dE * Math.sin(headRad) + dN * Math.cos(headRad));
       return { x, z };
@@ -319,6 +317,26 @@ export class ArViewComponent implements OnInit, OnDestroy {
   async onStartAR(): Promise<void> {
     await this.orientation.requestPermission();
     await this.arService.startAR(this.overlayRef.nativeElement);
+
+    // Lock in a heading reference for AR placement. WebXR's world axes are
+    // anchored to the device pose at session start, so we need to know which
+    // compass direction that pose corresponds to and use it consistently.
+    // The orientation signal may not be ready yet — poll briefly.
+    if (!this.orientation.captureHeadingReference()) {
+      const start = Date.now();
+      const tryCapture = () => {
+        if (this.orientation.captureHeadingReference()) return;
+        if (Date.now() - start > 3000) return;
+        setTimeout(tryCapture, 100);
+      };
+      tryCapture();
+    }
+
+    // Force-rebuild the grid + fossils with the new reference frame.
+    this.lastGridKey = '';
+    this.allFossils().forEach(f => this.arService.removeFossil(f.id));
+    const pos = this.gps.playerPosition();
+    if (pos) this.replenishFossils(pos);
   }
 
   onCollect(fossil: FossilLocation): void {
@@ -404,6 +422,7 @@ export class ArViewComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.gps.stopTracking();
     this.orientation.stop();
+    this.orientation.clearHeadingReference();
     this.arService.stopAR();
   }
 }
