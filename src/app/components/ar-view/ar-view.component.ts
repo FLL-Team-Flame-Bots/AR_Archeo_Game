@@ -115,6 +115,10 @@ const MAX_PER_AREA = 1;
             <span class="floor-debug-label">last:</span>
             <span class="floor-debug-value">{{ arService.lastReject() }}</span>
           </div>
+          <button class="grid-toggle" (click)="toggleGrid()"
+                  [class.on]="showGrid()">
+            Grid: {{ showGrid() ? 'ON' : 'OFF' }}
+          </button>
         </div>
       </div>
     </div>
@@ -175,6 +179,13 @@ const MAX_PER_AREA = 1;
     .floor-debug-value { color: #f5e6c8; }
     .floor-debug-value.ok      { color: #4ade80; font-weight: 600; }
     .floor-debug-value.waiting { color: #facc15; }
+    .grid-toggle {
+      margin-top: 4px; padding: 3px 8px;
+      background: rgba(0,0,0,0.5); border: 1px solid rgba(255,215,0,0.4);
+      color: #f5e6c8; font-family: monospace; font-size: 11px;
+      border-radius: 4px; cursor: pointer; pointer-events: all;
+    }
+    .grid-toggle.on { background: rgba(255,215,0,0.25); color: #ffd700; }
   `]
 })
 export class ArViewComponent implements OnInit, OnDestroy {
@@ -196,6 +207,20 @@ export class ArViewComponent implements OnInit, OnDestroy {
   private cellUsage = new Map<string, number>();
   /** Cached cell key the player was in last time we regenerated the AR grid overlay. */
   private lastGridKey = '';
+  /** When false, the AR grid overlay is hidden. */
+  showGrid = signal(true);
+
+  toggleGrid(): void {
+    const next = !this.showGrid();
+    this.showGrid.set(next);
+    if (!next) {
+      this.arService.clearGrid();
+      this.lastGridKey = '';
+    } else {
+      const pos = this.gps.playerPosition();
+      if (pos) this.refreshGridOverlay(pos);
+    }
+  }
 
   /** Bearing + distance to every active uncollected fossil, for the HUD radar/arrows. */
   fossilDirections = computed(() => {
@@ -235,7 +260,8 @@ export class ArViewComponent implements OnInit, OnDestroy {
     effect(() => {
       const pos = this.gps.playerPosition();
       const active = this.arService.active();
-      if (!pos || !active) return;
+      const on = this.showGrid();
+      if (!pos || !active || !on) return;
       untracked(() => this.refreshGridOverlay(pos));
     });
   }
