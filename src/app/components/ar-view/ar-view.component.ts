@@ -8,7 +8,7 @@ import { GpsService } from '../../services/gps.service';
 import { FossilLocation } from '../../data/fossil.model';
 import { FossilCardComponent } from '../fossil-card/fossil-card.component';
 import { HudComponent } from '../hud/hud.component';
-import { OrientationService } from '../../services/orientation.service';
+import { OrientationService, DEVICE_HEIGHT_M } from '../../services/orientation.service';
 import fossilTemplates from '../../data/fossils.json';
 
 /** Grid cell size (m). Each cell ever produces at most one fossil. */
@@ -407,6 +407,17 @@ export class ArViewComponent implements OnInit, OnDestroy {
   showLearn = false;
 
   private spawnCounter = 0;
+  /** GPS coords captured at AR session start. Fossil world-space positions
+   *  are computed as offsets from this origin, NOT from the live player
+   *  GPS. WebXR SLAM tracks player motion through world space on its own,
+   *  so re-placing fossils on every GPS update double-counts motion and
+   *  makes fossils snap whenever a noisy fix arrives. With a fixed origin,
+   *  each fossil is placed once and then WebXR keeps it stable as the
+   *  player walks through it. */
+  private originPos: { lat: number; lng: number } | null = null;
+  /** Ids already placed in the AR scene this session. Placement is
+   *  one-shot per fossil to keep it anchored under GPS jitter. */
+  private placedFossilIds = new Set<string>();
   /** Per-cell state. Each cell rolls 0/1/2 fossils on first visit and
    *  remembers them; collected ones are tracked separately so they don't
    *  respawn while the rest of the cell still might. */
@@ -561,11 +572,32 @@ export class ArViewComponent implements OnInit, OnDestroy {
       tryCapture();
     }
 
-    // Force-rebuild the grid + fossils with the new reference frame.
-    this.lastGridKey = '';
-    this.allFossils().forEach(f => this.arService.removeFossil(f.id));
-    const pos = this.gps.playerPosition();
-    if (pos) this.replenishFossils(pos);
+    // Lock in a GPS origin too. All fossil placements this session are
+    // offsets from this single point, so live GPS jitter no longer moves
+    // already-placed fossils. If GPS isn't ready yet, poll briefly.
+    const completeOriginSetup = () => {
+      this.placedFossilIds.clear();
+      this.lastGridKey = '';
+      this.allFossils().forEach(f => this.arService.removeFossil(f.id));
+      const p = this.gps.playerPosition();
+      if (p) {
+        this.replenishFossils(p);
+        this.syncARMarkers(this.gps.nearbyFossils());
+      }
+    };
+    this.originPos = this.gps.playerPosition();
+    if (this.originPos) {
+      completeOriginSetup();
+    } else {
+      const originStart = Date.now();
+      const tryCaptureOrigin = () => {
+        const p = this.gps.playerPosition();
+        if (p) { this.originPos = p; completeOriginSetup(); return; }
+        if (Date.now() - originStart > 3000) return;
+        setTimeout(tryCaptureOrigin, 100);
+      };
+      tryCaptureOrigin();
+    }
   }
 
   onCollect(fossil: FossilLocation): void {
@@ -710,20 +742,35 @@ export class ArViewComponent implements OnInit, OnDestroy {
   }
 
   private syncARMarkers(nearby: FossilLocation[]): void {
+    const origin = this.originPos;
+    // Until AR is started and GPS origin is captured, nothing to place.
+    if (!origin) return;
+    const headingRef = this.orientation.headingReference()
+      ?? this.orientation.orientation()?.heading ?? 0;
+    const headRad = (headingRef * Math.PI) / 180;
+    const cosLat = Math.cos(origin.lat * Math.PI / 180);
+
     nearby.forEach((f) => {
       if (this.collectedIds.has(f.id)) return;
-      const distM   = this.gps.distanceTo(f);
-      const bearing = this.gps.bearingTo(f);
-      // Place fossils at their real-world distance so they line up with the
-      // AR grid overlay (and with each other).
-      const { x, y, z } = this.orientation.fossilOffset(bearing, distM);
+      // Place once. Never reposition a placed fossil — that's what caused
+      // the "snap" on GPS updates.
+      if (this.placedFossilIds.has(f.id)) return;
+      // ENU delta from the session origin to this fossil's GPS coords.
+      const dN = (f.lat - origin.lat) * 111_000;
+      const dE = (f.lng - origin.lng) * 111_000 * cosLat;
+      // Rotate ENU into WebXR world axes (locked at session start).
+      const x =  dE * Math.cos(headRad) - dN * Math.sin(headRad);
+      const z = -(dE * Math.sin(headRad) + dN * Math.cos(headRad));
+      const y = -DEVICE_HEIGHT_M;
       this.arService.placeFossil(f.id, new THREE.Vector3(x, y, z));
+      this.placedFossilIds.add(f.id);
     });
 
     const nearbyIds = new Set(nearby.map(f => f.id));
     this.allFossils().forEach(f => {
       if (!nearbyIds.has(f.id) && !this.collectedIds.has(f.id)) {
         this.arService.removeFossil(f.id);
+        this.placedFossilIds.delete(f.id);
       }
     });
   }
@@ -732,6 +779,8 @@ export class ArViewComponent implements OnInit, OnDestroy {
     this.gps.stopTracking();
     this.orientation.stop();
     this.orientation.clearHeadingReference();
+    this.originPos = null;
+    this.placedFossilIds.clear();
     this.arService.stopAR();
   }
 }
