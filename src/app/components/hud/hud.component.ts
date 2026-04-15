@@ -56,7 +56,7 @@ export interface FossilDirection {
           <div class="radar-title">RADAR</div>
           <svg class="radar-svg" viewBox="-50 -50 100 100">
             <circle cx="0" cy="0" r="49" fill="rgba(0,0,0,0.6)" stroke="rgba(255,215,0,0.35)" stroke-width="1"/>
-            <!-- 15 m ring, 30 m edge ring -->
+            <!-- 5 m ring, 10 m edge ring -->
             <circle cx="0" cy="0" r="22" fill="none" stroke="rgba(74,222,128,0.3)" stroke-width="0.8" stroke-dasharray="2,2"/>
             <circle cx="0" cy="0" r="44" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="0.5"/>
             <line x1="0" y1="-48" x2="0" y2="48" stroke="rgba(255,255,255,0.07)" stroke-width="0.5"/>
@@ -79,7 +79,7 @@ export interface FossilDirection {
       </ng-container>
 
       <!-- Version stamp -->
-      <div class="version-stamp">v2.3.3</div>
+      <div class="version-stamp">v2.3.4</div>
 
       <!-- Bottom bar -->
       <div class="bottom-bar">
@@ -204,9 +204,9 @@ export class HudComponent {
 
   trackById(_: number, f: { id: string }) { return f.id; }
 
-  /** Radar dots — only fossils within 30 m, max 10, size encodes closeness. */
+  /** Radar dots — only fossils within 10 m, max 10, size encodes closeness. */
   get radarDots(): Array<{ id: string; x: number; y: number; r: number }> {
-    const MAX_DIST = 30, MAX_R = 44;
+    const MAX_DIST = 10, MAX_R = 44;
     return this.fossilDirections.filter(f => f.distance <= MAX_DIST).slice(0, 10).map(f => {
       const dist  = Math.min(f.distance, MAX_DIST);
       const pos   = (dist / MAX_DIST) * MAX_R;
@@ -221,16 +221,16 @@ export class HudComponent {
     });
   }
 
-  /** Edge dots for fossils within 30 m that are outside the camera FOV (~±50°). */
+  /** Edge dots for fossils within 10 m that are outside the camera FOV (~±50°). */
   get offScreenFossils(): Array<{ id: string; size: number; style: Record<string, string> }> {
     return this.fossilDirections
-      .filter(f => f.distance <= 30)
+      .filter(f => f.distance <= 10)
       .map(f => {
         const norm = f.relAngle > 180 ? f.relAngle - 360 : f.relAngle; // −180..+180
         if (Math.abs(norm) <= 50) return null;
 
-        // Dot size: 12 px (30 m away) → 34 px (right next to you)
-        const size = Math.round(12 + (1 - Math.min(f.distance, 30) / 30) * 22);
+        // Dot size: 12 px (10 m away) → 34 px (right next to you)
+        const size = Math.round(12 + (1 - Math.min(f.distance, 10) / 10) * 22);
 
         // Project bearing onto screen edge
         const rad  = (f.relAngle * Math.PI) / 180;

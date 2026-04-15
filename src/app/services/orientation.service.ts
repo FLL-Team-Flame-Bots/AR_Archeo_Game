@@ -14,6 +14,7 @@ export class OrientationService {
   permissionDenied = signal(false);
 
   private bound!: (e: DeviceOrientationEvent) => void;
+  private boundEvent: 'deviceorientationabsolute' | 'deviceorientation' = 'deviceorientation';
 
   constructor(private ngZone: NgZone) {}
 
@@ -38,27 +39,33 @@ export class OrientationService {
       this.ngZone.run(() => {
         if (e.alpha == null) return;
 
-        // alpha  = compass heading (0-360, clockwise from north)
-        // beta   = front-back tilt. 0 = flat, 90 = standing upright, -90 = upside down
-        // gamma  = left-right tilt. -90 to 90
+        // beta  — 0 = flat (screen up), 90 = held upright; we want pitch=0
+        //         to mean horizontal, positive = tilting down.
+        const pitch = (e.beta ?? 0) - 90;
 
-        // Convert beta into a "tilt from horizontal":
-        // beta=0 → flat (looking at ceiling); beta=90 → vertical (looking at horizon)
-        // We normalise so that pitch=0 means horizontal, positive = tilting down
-        const pitch = (e.beta ?? 0) - 90; // degrees below/above horizon
+        // Derive compass heading (CW from north).
+        //  • iOS Safari exposes it directly via webkitCompassHeading.
+        //  • Everywhere else, alpha is counter-clockwise from north, so we
+        //    flip it: compass = (360 - alpha) % 360.
+        const webkitHdg = (e as unknown as { webkitCompassHeading?: number }).webkitCompassHeading;
+        const heading = typeof webkitHdg === 'number'
+          ? webkitHdg
+          : (360 - (e.alpha ?? 0)) % 360;
 
-        this.orientation.set({
-          heading: e.alpha ?? 0,
-          pitch,
-          roll: e.gamma ?? 0,
-        });
+        this.orientation.set({ heading, pitch, roll: e.gamma ?? 0 });
       });
     };
-    window.addEventListener('deviceorientation', this.bound, true);
+    // Prefer absolute (true compass) over relative orientation when available.
+    if ('ondeviceorientationabsolute' in window) {
+      this.boundEvent = 'deviceorientationabsolute';
+    } else {
+      this.boundEvent = 'deviceorientation';
+    }
+    window.addEventListener(this.boundEvent, this.bound as EventListener, true);
   }
 
   stop(): void {
-    if (this.bound) window.removeEventListener('deviceorientation', this.bound, true);
+    if (this.bound) window.removeEventListener(this.boundEvent, this.bound as EventListener, true);
   }
 
   /**
