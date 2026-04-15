@@ -254,6 +254,10 @@ export class ArService {
     const t = performance.now() / 1000;
 
     // Sample the ground below the viewer each frame via WebXR hit-test.
+    // Filter the raw hit: (1) horizontal surfaces only (reject walls, slopes,
+    // car hoods), (2) sanity-range around the camera's y (reject ceilings and
+    // weird jumps), (3) low-pass smoothing so a single bad hit can't teleport
+    // fossils.
     if (frame && this.hitTestSource) {
       const refSpace = this.renderer.xr.getReferenceSpace();
       if (refSpace) {
@@ -262,7 +266,24 @@ export class ArService {
         }).getHitTestResults(this.hitTestSource);
         if (hits.length > 0) {
           const pose = hits[0].getPose(refSpace);
-          if (pose) this.groundY = pose.transform.position.y;
+          if (pose) {
+            const q = pose.transform.orientation;
+            const normal = new THREE.Vector3(0, 1, 0)
+              .applyQuaternion(new THREE.Quaternion(q.x, q.y, q.z, q.w));
+
+            const hitY   = pose.transform.position.y;
+            const camY   = this.camera.position.y;
+            const isFlat = normal.y > 0.85;                 // ~≤32° from vertical
+            const inRange = hitY > camY - 2.5 && hitY < camY + 0.5;
+
+            if (isFlat && inRange) {
+              // Low-pass filter: 80% previous, 20% new. First accepted hit
+              // initialises the value directly.
+              this.groundY = this.groundY === null
+                ? hitY
+                : this.groundY * 0.8 + hitY * 0.2;
+            }
+          }
         }
       }
     }
