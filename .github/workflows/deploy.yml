@@ -32,4 +32,5 @@ jobs:
           folder: dist/AR_Archeo_Game/browser
           branch: gh-pages
           clean: true
-          cname: ar.flamebots.org
+          # Preserve the CNAME file written to gh-pages by the Pages settings.
+          clean-exclude: CNAME
