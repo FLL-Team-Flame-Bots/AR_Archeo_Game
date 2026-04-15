@@ -169,6 +169,10 @@ const RARITY_POINTS: Record<string, number> = {
                   [class.on]="showGrid()">
             Grid: {{ showGrid() ? 'ON' : 'OFF' }}
           </button>
+          <div class="debug-row">
+            <button class="debug-btn legendary" (click)="debugCollect('legendary')">+Legendary</button>
+            <button class="debug-btn chroma"    (click)="debugCollect('chroma')">+Chroma</button>
+          </div>
         </div>
       </div>
     </div>
@@ -365,6 +369,17 @@ const RARITY_POINTS: Record<string, number> = {
       border-radius: 4px; cursor: pointer; pointer-events: all;
     }
     .grid-toggle.on { background: rgba(255,215,0,0.25); color: #ffd700; }
+    .debug-row { display: flex; gap: 4px; margin-top: 4px; }
+    .debug-btn {
+      flex: 1; padding: 3px 6px; border: none; border-radius: 4px;
+      font-family: monospace; font-size: 10px; font-weight: 700;
+      cursor: pointer; pointer-events: all; color: #000;
+    }
+    .debug-btn.legendary { background: #ffd700; }
+    .debug-btn.chroma {
+      background: linear-gradient(90deg, #ff0040, #ffe000, #00e060, #00c0ff, #ff00d0);
+      color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+    }
   `]
 })
 export class ArViewComponent implements OnInit, OnDestroy {
@@ -589,6 +604,20 @@ export class ArViewComponent implements OnInit, OnDestroy {
   }
 
   pointsFor(rarity: string): number { return RARITY_POINTS[rarity] ?? 0; }
+
+  /** Test helper: fabricate a fossil of the given rarity and run it through
+   *  the normal collection flow so the celebration + collection panel update. */
+  debugCollect(rarity: string): void {
+    const tpl = this.fossilTemplates.find(t => t.rarity === rarity);
+    if (!tpl) return;
+    this.spawnCounter++;
+    this.onCollect({
+      ...tpl,
+      id: `debug_${tpl.id}_${this.spawnCounter}`,
+      lat: 0, lng: 0, discovered: false,
+    });
+  }
+
   confettiPieces = Array.from({ length: 24 }, (_, i) => i);
   confettiEmoji(rarity: string): string {
     return rarity === 'chroma' ? '🌈' : '✨';
