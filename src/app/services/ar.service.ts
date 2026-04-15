@@ -22,6 +22,17 @@ export class ArService {
   loading = signal(false);
   error = signal<string | null>(null);
 
+  /** Debug readouts for the on-screen floor-detection panel. */
+  groundYSignal = signal<number | null>(null);
+  hitCount      = signal(0);
+  rejectedCount = signal(0);
+  lastReject    = signal<string>('');
+
+  private debugHits = 0;
+  private debugRej  = 0;
+  private debugLast = '';
+  private debugLastFlush = 0;
+
   constructor(private ngZone: NgZone) {}
 
   async checkSupport(): Promise<boolean> {
@@ -129,6 +140,13 @@ export class ArService {
           this.xrSession = null;
           this.hitTestSource = null;
           this.groundY = null;
+          this.debugHits = 0;
+          this.debugRej  = 0;
+          this.debugLast = '';
+          this.groundYSignal.set(null);
+          this.hitCount.set(0);
+          this.rejectedCount.set(0);
+          this.lastReject.set('');
         });
       });
 
@@ -250,6 +268,23 @@ export class ArService {
     }
   }
 
+  /** Pushes debug counters into signals at most ~4×/sec so CD doesn't thrash. */
+  private flushDebug(force: boolean): void {
+    const now = performance.now();
+    if (!force && now - this.debugLastFlush < 250) return;
+    this.debugLastFlush = now;
+    const g = this.groundY;
+    const h = this.debugHits;
+    const r = this.debugRej;
+    const last = this.debugLast;
+    this.ngZone.run(() => {
+      this.groundYSignal.set(g);
+      this.hitCount.set(h);
+      this.rejectedCount.set(r);
+      this.lastReject.set(last);
+    });
+  }
+
   private tick(frame: XRFrame | null): void {
     const t = performance.now() / 1000;
 
@@ -279,13 +314,22 @@ export class ArService {
             if (isFlat && inRange) {
               // Low-pass filter: 80% previous, 20% new. First accepted hit
               // initialises the value directly.
-              this.groundY = this.groundY === null
+              const firstHit = this.groundY === null;
+              this.groundY = firstHit
                 ? hitY
-                : this.groundY * 0.8 + hitY * 0.2;
+                : this.groundY! * 0.8 + hitY * 0.2;
+              this.debugHits++;
+              if (firstHit) this.flushDebug(true);
+            } else {
+              this.debugRej++;
+              this.debugLast = !isFlat
+                ? `slope(n.y=${normal.y.toFixed(2)})`
+                : `range(Δ=${(hitY - camY).toFixed(2)}m)`;
             }
           }
         }
       }
+      this.flushDebug(false);
     }
 
     // Keep fossils seated on the ground. A fossil adopts the current ground

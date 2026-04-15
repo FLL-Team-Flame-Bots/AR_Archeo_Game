@@ -92,6 +92,30 @@ const MAX_PER_AREA = 5;
 
         <!-- GPS error toast -->
         <div class="gps-error-toast" *ngIf="gps.error()">{{ gps.error() }}</div>
+
+        <!-- Floor-detection debug readout (only while AR is active) -->
+        <div class="floor-debug" *ngIf="arService.active()">
+          <div class="floor-debug-row">
+            <span class="floor-debug-label">Floor:</span>
+            <span class="floor-debug-value"
+                  [class.ok]="arService.groundYSignal() !== null"
+                  [class.waiting]="arService.groundYSignal() === null">
+              {{ arService.groundYSignal() === null
+                  ? 'searching…'
+                  : 'y=' + arService.groundYSignal()!.toFixed(2) + 'm' }}
+            </span>
+          </div>
+          <div class="floor-debug-row">
+            <span class="floor-debug-label">hits:</span>
+            <span class="floor-debug-value">{{ arService.hitCount() }}</span>
+            <span class="floor-debug-label">rej:</span>
+            <span class="floor-debug-value">{{ arService.rejectedCount() }}</span>
+          </div>
+          <div class="floor-debug-row" *ngIf="arService.lastReject()">
+            <span class="floor-debug-label">last:</span>
+            <span class="floor-debug-value">{{ arService.lastReject() }}</span>
+          </div>
+        </div>
       </div>
     </div>
   `,
@@ -138,6 +162,19 @@ const MAX_PER_AREA = 5;
       background: rgba(200,80,0,0.9); color: #fff; padding: 8px 16px;
       border-radius: 20px; font-size: 12px; pointer-events: none;
     }
+    .floor-debug {
+      position: fixed; top: 58px; left: 12px;
+      background: rgba(0,0,0,0.6); color: #f5e6c8;
+      border: 1px solid rgba(255,215,0,0.3);
+      border-radius: 8px; padding: 6px 10px;
+      font-size: 11px; font-family: monospace; line-height: 1.4;
+      pointer-events: none; z-index: 30;
+    }
+    .floor-debug-row { display: flex; gap: 6px; }
+    .floor-debug-label { color: rgba(200,168,107,0.7); }
+    .floor-debug-value { color: #f5e6c8; }
+    .floor-debug-value.ok      { color: #4ade80; font-weight: 600; }
+    .floor-debug-value.waiting { color: #facc15; }
   `]
 })
 export class ArViewComponent implements OnInit, OnDestroy {
