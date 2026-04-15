@@ -8,27 +8,14 @@ import { GpsService } from '../../services/gps.service';
 import { FossilLocation } from '../../data/fossil.model';
 import { FossilCardComponent } from '../fossil-card/fossil-card.component';
 import { HudComponent } from '../hud/hud.component';
-import { randomNearbyPoint } from '../../utils/geo.utils';
 import { OrientationService } from '../../services/orientation.service';
 import fossilTemplates from '../../data/fossils.json';
 
-/** How many fossils to keep within SPAWN_ZONE_M of the player. */
-const NEAR_TARGET = 5;
-/** Radius used when counting "nearby" fossils for spawn decisions. */
-const SPAWN_ZONE_M = 30;
-/** Hard cap on total pool size to prevent unbounded growth. */
-const MAX_TOTAL = 40;
-/** Fossils beyond this distance are despawned to free memory. */
-const DESPAWN_RADIUS_M = 50;
-/** Minimum metres between any two fossils. */
-const MIN_FOSSIL_SEP_M = 8;
-/** Minimum / maximum spawn distance from the player. */
-const SPAWN_MIN_M = 5;
-const SPAWN_MAX_M = 30;
-/** Grid cell size (m) used to cap fossils per area — forces walking. */
+/** Grid cell size (m). Each cell ever produces at most one fossil. */
 const AREA_CELL_M = 10;
-/** Max fossils ever spawnable within a single AREA_CELL_M grid cell. */
-const MAX_PER_AREA = 1;
+/** Cells in each direction around the player that stay populated. A value
+ *  of 2 means a 5×5 ring of cells is always alive around the player. */
+const ACTIVE_RADIUS_CELLS = 2;
 
 @Component({
   selector: 'app-ar-view',
@@ -203,8 +190,9 @@ export class ArViewComponent implements OnInit, OnDestroy {
   showLearn = false;
 
   private spawnCounter = 0;
-  /** Tracks how many fossils have ever spawned in each grid cell (active + collected). */
-  private cellUsage = new Map<string, number>();
+  /** Per-cell state: a stored fossil that respawns when the player returns,
+   *  or 'collected' once the player has picked it up (never respawns). */
+  private cellStates = new Map<string, FossilLocation | 'collected'>();
   /** Cached cell key the player was in last time we regenerated the AR grid overlay. */
   private lastGridKey = '';
   /** When false, the AR grid overlay is hidden. */
@@ -335,95 +323,63 @@ export class ArViewComponent implements OnInit, OnDestroy {
 
   onCollect(fossil: FossilLocation): void {
     this.collectedIds.add(fossil.id);
+    this.cellStates.set(this.cellKey(fossil.lat, fossil.lng), 'collected');
     this.arService.removeFossil(fossil.id);
     this.selectedFossil.set(null);
 
-    // Remove from active pool — no replacement (fixed pool per area)
     this.allFossils.update(list => list.filter(f => f.id !== fossil.id));
     this.gps.loadFossils(this.allFossils());
   }
 
-  /** Despawn fossils beyond DESPAWN_RADIUS_M, then top up to NEAR_TARGET around the player. */
+  /** Maintains exactly the (2*ACTIVE_RADIUS_CELLS+1)² ring of fossils around
+   *  the player. Cells already collected stay empty; cells the player has
+   *  visited before re-emit the same fossil they had previously. */
   private replenishFossils(pos: { lat: number; lng: number }): void {
-    const all = this.allFossils();
+    const step = AREA_CELL_M / 111_000;
+    const cLat = Math.floor(pos.lat / step);
+    const cLng = Math.floor(pos.lng / step);
+    const r    = ACTIVE_RADIUS_CELLS;
+    const active: FossilLocation[] = [];
 
-    // Despawn fossils beyond DESPAWN_RADIUS_M — use pos directly, not GPS signal
-    const remaining = all.filter(f => {
-      if (this.flatDistM(pos.lat, pos.lng, f.lat, f.lng) > DESPAWN_RADIUS_M) {
-        this.arService.removeFossil(f.id);
-        return false;
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        const key = `${cLat + dy}:${cLng + dx}`;
+        const state = this.cellStates.get(key);
+        if (state === 'collected') continue;
+        if (state) {
+          active.push(state);
+        } else {
+          const fossil = this.spawnInCell(cLat + dy, cLng + dx, step);
+          this.cellStates.set(key, fossil);
+          active.push(fossil);
+        }
       }
-      return true;
+    }
+
+    // Despawn anything in the previous pool that isn't part of the new ring.
+    const activeIds = new Set(active.map(f => f.id));
+    this.allFossils().forEach(f => {
+      if (!activeIds.has(f.id)) this.arService.removeFossil(f.id);
     });
 
-    // Count how many fossils are within SPAWN_ZONE_M of the player
-    const nearCount = remaining.filter(
-      f => this.flatDistM(pos.lat, pos.lng, f.lat, f.lng) <= SPAWN_ZONE_M
-    ).length;
-
-    const needed = remaining.length < MAX_TOTAL
-      ? Math.max(0, NEAR_TARGET - nearCount)
-      : 0;
-
-    const fresh: FossilLocation[] = [];
-
-    // Spawn new fossils, passing already-staged fossils so they exclude each other
-    for (let i = 0; i < needed; i++) {
-      const f = this.trySpawn(pos.lat, pos.lng, SPAWN_MIN_M, SPAWN_MAX_M, remaining, fresh);
-      if (f) fresh.push(f);
-    }
-
-    if (remaining.length !== all.length || fresh.length > 0) {
-      const updated = [...remaining, ...fresh];
-      this.allFossils.set(updated);
-      this.gps.loadFossils(updated);
-    }
+    this.allFossils.set(active);
+    this.gps.loadFossils(active);
   }
 
-  /**
-   * Tries up to 30 random positions within minM–maxM of the player.
-   * Checks against both already-active fossils AND fossils staged in the
-   * current batch (`staged`), so fossils within a single replenish cycle
-   * don't cluster together.
-   */
-  private trySpawn(
-    playerLat: number, playerLng: number,
-    minM: number, maxM: number,
-    active: FossilLocation[],
-    staged: FossilLocation[],
-  ): FossilLocation | null {
-    const all = [...active, ...staged];
-    for (let attempt = 0; attempt < 30; attempt++) {
-      const { lat, lng } = randomNearbyPoint(playerLat, playerLng, minM, maxM);
-      const tooClose = all.some(
-        f => this.flatDistM(f.lat, f.lng, lat, lng) < MIN_FOSSIL_SEP_M
-      );
-      if (tooClose) continue;
-
-      // Enforce per-area cap — forces the player to walk to new ground.
-      const key  = this.cellKey(lat, lng);
-      const used = this.cellUsage.get(key) ?? 0;
-      if (used >= MAX_PER_AREA) continue;
-
-      this.cellUsage.set(key, used + 1);
-      const tpl = this.fossilTemplates[this.spawnCounter % this.fossilTemplates.length];
-      this.spawnCounter++;
-      return { ...tpl, id: `${tpl.id}_${Date.now()}_${this.spawnCounter}`, lat, lng, discovered: false };
-    }
-    return null;
+  /** Picks a position somewhere inside the cell (not flush against an edge)
+   *  and creates a fossil instance from the next template in rotation. */
+  private spawnInCell(cLat: number, cLng: number, step: number): FossilLocation {
+    const lat = (cLat + 0.2 + Math.random() * 0.6) * step;
+    const lng = (cLng + 0.2 + Math.random() * 0.6) * step;
+    const tpl = this.fossilTemplates[this.spawnCounter % this.fossilTemplates.length];
+    this.spawnCounter++;
+    return { ...tpl, id: `${tpl.id}_${Date.now()}_${this.spawnCounter}`, lat, lng, discovered: false };
   }
 
-  /** Grid key for per-area fossil cap. ~AREA_CELL_M cells at mid latitudes. */
+  /** Grid key for the cell containing a given lat/lng. */
   private cellKey(lat: number, lng: number): string {
     const step = AREA_CELL_M / 111_000;
     return `${Math.floor(lat / step)}:${Math.floor(lng / step)}`;
-  }
-
-  /** Fast flat-earth distance in metres — accurate enough within 200 m. */
-  private flatDistM(lat1: number, lng1: number, lat2: number, lng2: number): number {
-    const dLat = (lat2 - lat1) * 111_000;
-    const dLng = (lng2 - lng1) * 111_000 * Math.cos(lat1 * Math.PI / 180);
-    return Math.sqrt(dLat * dLat + dLng * dLng);
   }
 
   private syncARMarkers(nearby: FossilLocation[]): void {
