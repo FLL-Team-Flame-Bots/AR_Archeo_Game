@@ -387,8 +387,9 @@ export class ArViewComponent implements OnInit, OnDestroy {
       if (this.collectedIds.has(f.id)) return;
       const distM   = this.gps.distanceTo(f);
       const bearing = this.gps.bearingTo(f);
-      const arDistM = Math.min(3, distM * 0.1);
-      const { x, y, z } = this.orientation.fossilOffset(bearing, arDistM);
+      // Place fossils at their real-world distance so they line up with the
+      // AR grid overlay (and with each other).
+      const { x, y, z } = this.orientation.fossilOffset(bearing, distM);
       this.arService.placeFossil(f.id, new THREE.Vector3(x, y, z));
     });
 

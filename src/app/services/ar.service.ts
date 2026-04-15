@@ -69,7 +69,7 @@ export class ArService {
     }, { passive: true });
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+    this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 50);
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
     this.scene.add(ambientLight);
@@ -290,7 +290,7 @@ export class ArService {
 
   /** Raycast along origin→direction; fires tapHandler with fossil ID if a fossil is hit. */
   private checkFossilHit(origin: THREE.Vector3, direction: THREE.Vector3): void {
-    const raycaster = new THREE.Raycaster(origin.clone(), direction.clone().normalize(), 0.01, 20);
+    const raycaster = new THREE.Raycaster(origin.clone(), direction.clone().normalize(), 0.01, 50);
 
     // Map every child object → parent fossil ID for quick lookup after intersection
     const objectToId = new Map<THREE.Object3D, string>();
