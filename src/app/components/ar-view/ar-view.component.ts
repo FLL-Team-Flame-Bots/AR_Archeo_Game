@@ -204,9 +204,10 @@ export class ArViewComponent implements OnInit, OnDestroy {
   showLearn = false;
 
   private spawnCounter = 0;
-  /** Per-cell state: a stored fossil that respawns when the player returns,
-   *  or 'collected' once the player has picked it up (never respawns). */
-  private cellStates = new Map<string, FossilLocation | 'collected'>();
+  /** Per-cell state. Each cell rolls 0/1/2 fossils on first visit and
+   *  remembers them; collected ones are tracked separately so they don't
+   *  respawn while the rest of the cell still might. */
+  private cellStates = new Map<string, { fossils: FossilLocation[]; collected: Set<string> }>();
   /** Cached cell key the player was in last time we regenerated the AR grid overlay. */
   private lastGridKey = '';
   /** "Walk closer — Xm away" toast shown when the player taps a far fossil. */
@@ -366,7 +367,8 @@ export class ArViewComponent implements OnInit, OnDestroy {
 
   onCollect(fossil: FossilLocation): void {
     this.collectedIds.add(fossil.id);
-    this.cellStates.set(this.cellKey(fossil.lat, fossil.lng), 'collected');
+    const rec = this.cellStates.get(this.cellKey(fossil.lat, fossil.lng));
+    if (rec) rec.collected.add(fossil.id);
     this.arService.removeFossil(fossil.id);
     this.selectedFossil.set(null);
 
@@ -374,9 +376,9 @@ export class ArViewComponent implements OnInit, OnDestroy {
     this.gps.loadFossils(this.allFossils());
   }
 
-  /** Maintains exactly the (2*ACTIVE_RADIUS_CELLS+1)² ring of fossils around
-   *  the player. Cells already collected stay empty; cells the player has
-   *  visited before re-emit the same fossil they had previously. */
+  /** Maintains the (2*ACTIVE_RADIUS_CELLS+1)² ring of cells around the player.
+   *  Each cell rolls 0/1/2 fossils on first visit (probabilities ¼/½/¼) and
+   *  remembers the result, so the same cell always has the same loot. */
   private replenishFossils(pos: { lat: number; lng: number }): void {
     const step = AREA_CELL_M / 111_000;
     const cLat = Math.floor(pos.lat / step);
@@ -387,15 +389,14 @@ export class ArViewComponent implements OnInit, OnDestroy {
     for (let dy = -r; dy <= r; dy++) {
       for (let dx = -r; dx <= r; dx++) {
         const key = `${cLat + dy}:${cLng + dx}`;
-        const state = this.cellStates.get(key);
-        if (state === 'collected') continue;
-        if (state) {
-          active.push(state);
-        } else {
-          const fossil = this.spawnInCell(cLat + dy, cLng + dx, step);
-          this.cellStates.set(key, fossil);
-          active.push(fossil);
+        let rec = this.cellStates.get(key);
+        if (!rec) {
+          rec = this.rollCell(cLat + dy, cLng + dx, step);
+          this.cellStates.set(key, rec);
         }
+        rec.fossils.forEach(f => {
+          if (!rec!.collected.has(f.id)) active.push(f);
+        });
       }
     }
 
@@ -407,6 +408,16 @@ export class ArViewComponent implements OnInit, OnDestroy {
 
     this.allFossils.set(active);
     this.gps.loadFossils(active);
+  }
+
+  /** Decides how many fossils a never-visited cell gets, then spawns them.
+   *  Distribution: 25% empty, 50% one fossil, 25% two fossils. */
+  private rollCell(cLat: number, cLng: number, step: number): { fossils: FossilLocation[]; collected: Set<string> } {
+    const r = Math.random();
+    const count = r < 0.25 ? 0 : r < 0.75 ? 1 : 2;
+    const fossils: FossilLocation[] = [];
+    for (let i = 0; i < count; i++) fossils.push(this.spawnInCell(cLat, cLng, step));
+    return { fossils, collected: new Set() };
   }
 
   /** Picks a position somewhere inside the cell (not flush against an edge)
