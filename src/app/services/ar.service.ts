@@ -101,14 +101,15 @@ export class ArService {
 
       // Request a persistent hit-test source that fires a ray straight down
       // from the viewer each frame — we use the hit's y as the live ground level.
+      const session = this.xrSession!;
       try {
-        const viewerSpace = await this.xrSession.requestReferenceSpace('viewer');
+        const viewerSpace = await session.requestReferenceSpace('viewer');
         const XRRayCtor = (window as unknown as { XRRay: new (init: object) => object }).XRRay;
         const downRay = new XRRayCtor({
           origin:    { x: 0, y: 0, z: 0, w: 1 },
           direction: { x: 0, y: -1, z: 0, w: 0 },
         });
-        this.hitTestSource = await (this.xrSession as unknown as {
+        this.hitTestSource = await (session as unknown as {
           requestHitTestSource: (opts: { space: XRSpace; offsetRay: object }) => Promise<XRHitTestSource>;
         }).requestHitTestSource({ space: viewerSpace, offsetRay: downRay });
       } catch {
