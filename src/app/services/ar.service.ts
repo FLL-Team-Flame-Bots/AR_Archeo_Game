@@ -232,6 +232,47 @@ export class ArService {
     this.tapHandler = fn;
   }
 
+  private gridMesh: THREE.LineSegments | null = null;
+
+  /** Draws a wireframe overlay of grid cells on the ground.
+   *  `segments` is a flat list of (start,end) pairs in camera-relative XZ.
+   *  Y is taken from the live ground hit-test, with a small lift so lines
+   *  don't z-fight with the real floor. */
+  placeGrid(segments: { x1: number; z1: number; x2: number; z2: number }[]): void {
+    if (this.gridMesh) {
+      this.scene.remove(this.gridMesh);
+      this.gridMesh.geometry.dispose();
+      (this.gridMesh.material as THREE.Material).dispose();
+    }
+    if (segments.length === 0) {
+      this.gridMesh = null;
+      return;
+    }
+    const cx = this.camera.position.x;
+    const cz = this.camera.position.z;
+    const positions = new Float32Array(segments.length * 6);
+    segments.forEach((s, i) => {
+      positions[i * 6 + 0] = cx + s.x1;
+      positions[i * 6 + 1] = 0;
+      positions[i * 6 + 2] = cz + s.z1;
+      positions[i * 6 + 3] = cx + s.x2;
+      positions[i * 6 + 4] = 0;
+      positions[i * 6 + 5] = cz + s.z2;
+    });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const mat = new THREE.LineBasicMaterial({
+      color: 0xffd700, transparent: true, opacity: 0.55,
+    });
+    this.gridMesh = new THREE.LineSegments(geo, mat);
+    this.gridMesh.position.y = (this.groundY ?? -DEVICE_HEIGHT_M) + 0.02;
+    this.scene.add(this.gridMesh);
+  }
+
+  clearGrid(): void {
+    this.placeGrid([]);
+  }
+
   removeFossil(id: string): void {
     const mesh = this.fossilMeshes.get(id);
     if (mesh) {
@@ -356,6 +397,9 @@ export class ArService {
         mesh.children[3].position.y = 0.24 + Math.sin(t * 2.5) * 0.03;
       }
     });
+
+    // Keep the grid overlay flush with the live ground (lifted slightly to avoid z-fighting).
+    if (this.gridMesh) this.gridMesh.position.y = currentGround + 0.02;
     this.renderer.render(this.scene, this.camera);
   }
 }

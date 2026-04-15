@@ -194,6 +194,8 @@ export class ArViewComponent implements OnInit, OnDestroy {
   private spawnCounter = 0;
   /** Tracks how many fossils have ever spawned in each grid cell (active + collected). */
   private cellUsage = new Map<string, number>();
+  /** Cached cell key the player was in last time we regenerated the AR grid overlay. */
+  private lastGridKey = '';
 
   /** Bearing + distance to every active uncollected fossil, for the HUD radar/arrows. */
   fossilDirections = computed(() => {
@@ -228,6 +230,61 @@ export class ArViewComponent implements OnInit, OnDestroy {
       const nearby = this.gps.nearbyFossils();
       this.syncARMarkers(nearby);
     });
+
+    // Redraw the AR grid overlay whenever the player crosses into a new cell.
+    effect(() => {
+      const pos = this.gps.playerPosition();
+      const active = this.arService.active();
+      if (!pos || !active) return;
+      untracked(() => this.refreshGridOverlay(pos));
+    });
+  }
+
+  /** Builds a 5×5 ring of cells around the player's current cell and pushes
+   *  it to the AR scene as ground-level wireframe lines. */
+  private refreshGridOverlay(pos: { lat: number; lng: number }): void {
+    const step  = AREA_CELL_M / 111_000;
+    const cLat  = Math.floor(pos.lat / step);
+    const cLng  = Math.floor(pos.lng / step);
+    const key   = `${cLat}:${cLng}`;
+    if (key === this.lastGridKey) return;
+    this.lastGridKey = key;
+
+    const RING = 2; // cells on each side → (2*2+1)² = 25 cells
+    const heading = this.orientation.orientation()?.heading ?? 0;
+    const segs: { x1: number; z1: number; x2: number; z2: number }[] = [];
+
+    const project = (lat: number, lng: number): { x: number; z: number } => {
+      // Local equirectangular projection — accurate within the player's
+      // immediate area. Convert metres east/north into XR-relative XZ, taking
+      // the player's compass heading into account so the lines stay aligned
+      // with real-world north as the player turns.
+      const dN = (lat - pos.lat) * 111_000;
+      const dE = (lng - pos.lng) * 111_000 * Math.cos(pos.lat * Math.PI / 180);
+      const headRad = (heading * Math.PI) / 180;
+      // Rotate (E, N) by -heading into camera-relative axes, then map to (X, -Z).
+      const x = dE * Math.cos(headRad) - dN * Math.sin(headRad);
+      const z = -(dE * Math.sin(headRad) + dN * Math.cos(headRad));
+      return { x, z };
+    };
+
+    for (let dy = -RING; dy <= RING; dy++) {
+      for (let dx = -RING; dx <= RING; dx++) {
+        const lat0 = (cLat + dy) * step, lat1 = (cLat + dy + 1) * step;
+        const lng0 = (cLng + dx) * step, lng1 = (cLng + dx + 1) * step;
+        const sw = project(lat0, lng0);
+        const nw = project(lat1, lng0);
+        const ne = project(lat1, lng1);
+        const se = project(lat0, lng1);
+        // Four edges per cell. Adjacent cells share edges (drawn twice) — fine
+        // for a few dozen lines and keeps the code simple.
+        segs.push({ x1: sw.x, z1: sw.z, x2: nw.x, z2: nw.z });
+        segs.push({ x1: nw.x, z1: nw.z, x2: ne.x, z2: ne.z });
+        segs.push({ x1: ne.x, z1: ne.z, x2: se.x, z2: se.z });
+        segs.push({ x1: se.x, z1: se.z, x2: sw.x, z2: sw.z });
+      }
+    }
+    this.arService.placeGrid(segs);
   }
 
   async ngOnInit(): Promise<void> {
