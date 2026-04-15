@@ -15,13 +15,20 @@ import fossilTemplates from '../../data/fossils.json';
 /** How many fossils to keep within SPAWN_ZONE_M of the player. */
 const NEAR_TARGET = 3;
 /** Radius used when counting "nearby" fossils for spawn decisions. */
-const SPAWN_ZONE_M = 12;
+const SPAWN_ZONE_M = 30;
 /** Hard cap on total pool size to prevent unbounded growth. */
 const MAX_TOTAL = 40;
 /** Fossils beyond this distance are despawned to free memory. */
-const DESPAWN_RADIUS_M = 20;
+const DESPAWN_RADIUS_M = 50;
 /** Minimum metres between any two fossils. */
-const MIN_FOSSIL_SEP_M = 3;
+const MIN_FOSSIL_SEP_M = 8;
+/** Minimum / maximum spawn distance from the player. */
+const SPAWN_MIN_M = 5;
+const SPAWN_MAX_M = 30;
+/** Grid cell size (m) used to cap fossils per area — forces walking. */
+const AREA_CELL_M = 30;
+/** Max fossils ever spawnable within a single AREA_CELL_M grid cell. */
+const MAX_PER_AREA = 5;
 
 @Component({
   selector: 'app-ar-view',
@@ -148,6 +155,8 @@ export class ArViewComponent implements OnInit, OnDestroy {
   showLearn = false;
 
   private spawnCounter = 0;
+  /** Tracks how many fossils have ever spawned in each grid cell (active + collected). */
+  private cellUsage = new Map<string, number>();
 
   /** Bearing + distance to every active uncollected fossil, for the HUD radar/arrows. */
   fossilDirections = computed(() => {
@@ -238,15 +247,9 @@ export class ArViewComponent implements OnInit, OnDestroy {
 
     const fresh: FossilLocation[] = [];
 
-    // On very first spawn place one fossil 2 m away for easy testing
-    if (all.length === 0) {
-      const close = this.trySpawn(pos.lat, pos.lng, 1, 2, remaining, fresh);
-      if (close) fresh.unshift(close);
-    }
-
     // Spawn new fossils, passing already-staged fossils so they exclude each other
     for (let i = 0; i < needed; i++) {
-      const f = this.trySpawn(pos.lat, pos.lng, 5, 12, remaining, fresh);
+      const f = this.trySpawn(pos.lat, pos.lng, SPAWN_MIN_M, SPAWN_MAX_M, remaining, fresh);
       if (f) fresh.push(f);
     }
 
@@ -275,13 +278,25 @@ export class ArViewComponent implements OnInit, OnDestroy {
       const tooClose = all.some(
         f => this.flatDistM(f.lat, f.lng, lat, lng) < MIN_FOSSIL_SEP_M
       );
-      if (!tooClose) {
-        const tpl = this.fossilTemplates[this.spawnCounter % this.fossilTemplates.length];
-        this.spawnCounter++;
-        return { ...tpl, id: `${tpl.id}_${Date.now()}_${this.spawnCounter}`, lat, lng, discovered: false };
-      }
+      if (tooClose) continue;
+
+      // Enforce per-area cap — forces the player to walk to new ground.
+      const key  = this.cellKey(lat, lng);
+      const used = this.cellUsage.get(key) ?? 0;
+      if (used >= MAX_PER_AREA) continue;
+
+      this.cellUsage.set(key, used + 1);
+      const tpl = this.fossilTemplates[this.spawnCounter % this.fossilTemplates.length];
+      this.spawnCounter++;
+      return { ...tpl, id: `${tpl.id}_${Date.now()}_${this.spawnCounter}`, lat, lng, discovered: false };
     }
     return null;
+  }
+
+  /** Grid key for per-area fossil cap. ~AREA_CELL_M cells at mid latitudes. */
+  private cellKey(lat: number, lng: number): string {
+    const step = AREA_CELL_M / 111_000;
+    return `${Math.floor(lat / step)}:${Math.floor(lng / step)}`;
   }
 
   /** Fast flat-earth distance in metres — accurate enough within 200 m. */
