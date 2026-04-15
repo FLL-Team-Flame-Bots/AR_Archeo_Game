@@ -16,6 +16,9 @@ const AREA_CELL_M = 10;
 /** Cells in each direction around the player that stay populated. A value
  *  of 1 means a 3×3 ring of cells is always alive around the player. */
 const ACTIVE_RADIUS_CELLS = 1;
+/** Player must be within this many metres of a fossil's GPS location to
+ *  open its card. Stops you grabbing fossils from across the field. */
+const COLLECT_RADIUS_M = 1;
 
 @Component({
   selector: 'app-ar-view',
@@ -79,6 +82,9 @@ const ACTIVE_RADIUS_CELLS = 1;
 
         <!-- GPS error toast -->
         <div class="gps-error-toast" *ngIf="gps.error()">{{ gps.error() }}</div>
+
+        <!-- "Too far to collect" toast -->
+        <div class="too-far-toast" *ngIf="tooFarToast()">{{ tooFarToast() }}</div>
 
         <!-- Floor-detection debug readout (only while AR is active) -->
         <div class="floor-debug" *ngIf="arService.active()">
@@ -153,6 +159,14 @@ const ACTIVE_RADIUS_CELLS = 1;
       background: rgba(200,80,0,0.9); color: #fff; padding: 8px 16px;
       border-radius: 20px; font-size: 12px; pointer-events: none;
     }
+    .too-far-toast {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      background: rgba(0,0,0,0.85); border: 1px solid #ffd700; color: #ffd700;
+      padding: 12px 20px; border-radius: 24px; font-size: 14px; font-weight: 700;
+      pointer-events: none; z-index: 50;
+      animation: toastIn 0.18s ease-out;
+    }
+    @keyframes toastIn { from { opacity: 0; transform: translate(-50%, -45%); } to { opacity: 1; transform: translate(-50%, -50%); } }
     .floor-debug {
       position: fixed; top: 58px; left: 12px;
       background: rgba(0,0,0,0.6); color: #f5e6c8;
@@ -195,6 +209,9 @@ export class ArViewComponent implements OnInit, OnDestroy {
   private cellStates = new Map<string, FossilLocation | 'collected'>();
   /** Cached cell key the player was in last time we regenerated the AR grid overlay. */
   private lastGridKey = '';
+  /** "Walk closer — Xm away" toast shown when the player taps a far fossil. */
+  tooFarToast = signal<string | null>(null);
+  private tooFarTimeout = 0;
   /** When false, the AR grid overlay is hidden. */
   showGrid = signal(true);
 
@@ -310,7 +327,15 @@ export class ArViewComponent implements OnInit, OnDestroy {
       if (this.selectedFossil()) return;
       const fossil = this.allFossils()
         .find(f => f.id === fossilId && !this.collectedIds.has(f.id) && !f.discovered);
-      if (fossil) this.selectedFossil.set(fossil);
+      if (!fossil) return;
+      const distM = this.gps.distanceTo(fossil);
+      if (distM > COLLECT_RADIUS_M) {
+        this.tooFarToast.set(`Walk closer — ${Math.round(distM)} m away`);
+        clearTimeout(this.tooFarTimeout);
+        this.tooFarTimeout = window.setTimeout(() => this.tooFarToast.set(null), 1800);
+        return;
+      }
+      this.selectedFossil.set(fossil);
     });
   }
 
