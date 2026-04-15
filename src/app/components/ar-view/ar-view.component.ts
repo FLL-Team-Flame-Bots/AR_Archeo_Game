@@ -14,8 +14,8 @@ import fossilTemplates from '../../data/fossils.json';
 /** Grid cell size (m). Each cell ever produces at most one fossil. */
 const AREA_CELL_M = 10;
 /** Cells in each direction around the player that stay populated. A value
- *  of 2 means a 5×5 ring of cells is always alive around the player. */
-const ACTIVE_RADIUS_CELLS = 2;
+ *  of 1 means a 3×3 ring of cells is always alive around the player. */
+const ACTIVE_RADIUS_CELLS = 1;
 
 @Component({
   selector: 'app-ar-view',
