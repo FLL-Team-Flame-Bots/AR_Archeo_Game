@@ -130,15 +130,16 @@ const RARITY_POINTS: Record<string, number> = {
           </div>
         </div>
 
-        <!-- Celebration overlay (legendary / chroma) -->
+        <!-- Celebration overlay (epic / legendary / chroma) -->
         <div class="celebration" *ngIf="celebrating() as f"
-             [class.celebration-chroma]="f.rarity === 'chroma'">
+             [class.celebration-chroma]="f.rarity === 'chroma'"
+             [class.celebration-epic]="f.rarity === 'epic'">
           <div class="celebration-confetti">
             <span *ngFor="let i of confettiPieces">{{ confettiEmoji(f.rarity) }}</span>
           </div>
           <div class="celebration-text">
             <div class="celebration-banner">
-              {{ f.rarity === 'chroma' ? '⟡ CHROMA ⟡' : 'LEGENDARY!' }}
+              {{ f.rarity === 'chroma' ? '⟡ CHROMA ⟡' : f.rarity === 'legendary' ? 'LEGENDARY!' : 'EPIC!' }}
             </div>
             <div class="celebration-name">{{ f.name }}</div>
             <div class="celebration-points">+{{ pointsFor(f.rarity) }} points</div>
@@ -288,6 +289,11 @@ const RARITY_POINTS: Record<string, number> = {
       background: radial-gradient(circle at center, rgba(255,215,0,0.25), transparent 60%);
       animation: celebFade 2.6s ease-out forwards;
     }
+    .celebration.celebration-epic {
+      background: radial-gradient(circle at center,
+        rgba(244,63,94,0.3), transparent 60%);
+      animation: celebFadeEpic 2s ease-out forwards;
+    }
     .celebration.celebration-chroma {
       background: radial-gradient(circle at center,
         rgba(255,0,150,0.35), rgba(0,200,255,0.25), transparent 70%);
@@ -295,6 +301,9 @@ const RARITY_POINTS: Record<string, number> = {
     }
     @keyframes celebFade {
       0%, 70% { opacity: 1; } 100% { opacity: 0; }
+    }
+    @keyframes celebFadeEpic {
+      0%, 60% { opacity: 1; } 100% { opacity: 0; }
     }
     @keyframes celebFadeChroma {
       0%, 80% { opacity: 1; } 100% { opacity: 0; }
@@ -343,6 +352,9 @@ const RARITY_POINTS: Record<string, number> = {
     .celebration-banner {
       font-size: 38px; font-weight: 900; letter-spacing: 4px;
       color: #ffd700;
+    }
+    .celebration.celebration-epic .celebration-banner {
+      color: #f43f5e;
     }
     .celebration.celebration-chroma .celebration-banner {
       background: linear-gradient(90deg, #ff0040, #ffe000, #00e060, #00c0ff, #ff00d0);
@@ -622,13 +634,15 @@ export class ArViewComponent implements OnInit, OnDestroy {
     this.allFossils.update(list => list.filter(f => f.id !== fossil.id));
     this.gps.loadFossils(this.allFossils());
 
-    // Celebrate legendary and chroma drops with an overlay.
-    if (fossil.rarity === 'legendary' || fossil.rarity === 'chroma') {
+    // Celebrate epic, legendary and chroma drops with an overlay.
+    if (fossil.rarity === 'epic' || fossil.rarity === 'legendary' || fossil.rarity === 'chroma') {
       this.celebrating.set(fossil);
       clearTimeout(this.celebrateTimeout);
+      const duration = fossil.rarity === 'chroma' ? 4500
+        : fossil.rarity === 'legendary' ? 2800 : 2000;
       this.celebrateTimeout = window.setTimeout(
         () => this.celebrating.set(null),
-        fossil.rarity === 'chroma' ? 4500 : 2800,
+        duration,
       );
     }
   }
@@ -663,7 +677,7 @@ export class ArViewComponent implements OnInit, OnDestroy {
 
   confettiPieces = Array.from({ length: 24 }, (_, i) => i);
   confettiEmoji(rarity: string): string {
-    return rarity === 'chroma' ? '🌈' : '✨';
+    return rarity === 'chroma' ? '🌈' : rarity === 'epic' ? '🔥' : '✨';
   }
 
   private emojiFor(baseId: string): string {
