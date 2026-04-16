@@ -169,6 +169,10 @@ const RARITY_POINTS: Record<string, number> = {
                   [class.on]="showGrid()">
             Grid: {{ showGrid() ? 'ON' : 'OFF' }}
           </button>
+          <button class="grid-toggle" (click)="toggleMarkers()"
+                  [class.on]="arService.markersVisible()">
+            Markers: {{ arService.markersVisible() ? 'ON' : 'OFF' }}
+          </button>
           <div class="debug-row">
             <button class="debug-btn legendary" (click)="debugCollect('legendary')">+Legendary</button>
             <button class="debug-btn chroma"    (click)="debugCollect('chroma')">+Chroma</button>
@@ -440,6 +444,10 @@ export class ArViewComponent implements OnInit, OnDestroy {
       const pos = this.gps.playerPosition();
       if (pos) this.refreshGridOverlay(pos);
     }
+  }
+
+  toggleMarkers(): void {
+    this.arService.setMarkersVisible(!this.arService.markersVisible());
   }
 
   /** Bearing + distance to every active uncollected fossil, for the HUD radar/arrows. */

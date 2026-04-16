@@ -22,6 +22,9 @@ export class ArService {
   loading = signal(false);
   error = signal<string | null>(null);
 
+  /** Whether fossil marker meshes are visible in the AR scene. */
+  markersVisible = signal(true);
+
   /** Debug readouts for the on-screen floor-detection panel. */
   groundYSignal = signal<number | null>(null);
   hitCount      = signal(0);
@@ -224,8 +227,14 @@ export class ArService {
       y,
       this.camera.position.z + position.z,
     );
+    group.visible = this.markersVisible();
     this.scene.add(group);
     this.fossilMeshes.set(id, group as unknown as THREE.Mesh);
+  }
+
+  setMarkersVisible(visible: boolean): void {
+    this.markersVisible.set(visible);
+    this.fossilMeshes.forEach(mesh => { mesh.visible = visible; });
   }
 
   setTapHandler(fn: (fossilId: string) => void): void {
