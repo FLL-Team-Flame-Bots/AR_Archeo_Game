@@ -113,7 +113,7 @@ export interface FossilDirection {
     .level-specialist  .level-value { color: #38bdf8; }
     .level-expert      .level-value { color: #a855f7; }
     .level-master      .level-value { color: #ffd700; }
-    .level-grand-master .level-value { color: #f43f5e; text-shadow: 0 0 6px rgba(244,63,94,0.6); }
+    .level-scholar      .level-value { color: #f43f5e; text-shadow: 0 0 6px rgba(244,63,94,0.6); }
     .gps-ok    { color: #4ade80; }
     .gps-error { color: #f87171; }
 
@@ -214,7 +214,7 @@ export class HudComponent {
   @Output() openLearn   = new EventEmitter<void>();
 
   private static readonly LEVELS: [number, string, string][] = [
-    [5000, 'Grand Master', 'grand-master'],
+    [5000, 'Scholar',      'scholar'],
     [2500, 'Master',       'master'],
     [1000, 'Expert',       'expert'],
     [400,  'Specialist',   'specialist'],
