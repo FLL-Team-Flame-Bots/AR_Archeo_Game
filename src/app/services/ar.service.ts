@@ -220,16 +220,11 @@ export class ArService {
     const hitSphere = new THREE.Mesh(hitGeo, hitMat);
     group.add(hitSphere);
 
-    // position is a camera-relative offset; convert to world space by adding
-    // the camera's current position so fossils are anchored to the real world,
-    // not to the AR session origin. Y comes from the live ground hit-test
-    // when available, falling back to the caller's y (usually -deviceHeight).
+    // Position is an origin-relative world-space offset (anchored to the GPS
+    // origin captured at AR session start). Place directly — do NOT add the
+    // camera position, or fossils drift as the player walks.
     const y = this.groundY ?? position.y;
-    group.position.set(
-      this.camera.position.x + position.x,
-      y,
-      this.camera.position.z + position.z,
-    );
+    group.position.set(position.x, y, position.z);
     group.visible = this.markersVisible();
     this.scene.add(group);
     this.fossilMeshes.set(id, group as unknown as THREE.Mesh);
