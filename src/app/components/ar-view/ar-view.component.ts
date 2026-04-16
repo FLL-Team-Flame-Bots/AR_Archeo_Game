@@ -763,9 +763,15 @@ export class ArViewComponent implements OnInit, OnDestroy {
     }
 
     // Despawn anything in the previous pool that isn't part of the new ring.
+    // Must also drop the ID from placedFossilIds — otherwise if the player
+    // walks back into that cell later, syncARMarkers sees "already placed"
+    // and the fossil never re-enters the scene (radar shows it, AR doesn't).
     const activeIds = new Set(active.map(f => f.id));
     this.allFossils().forEach(f => {
-      if (!activeIds.has(f.id)) this.arService.removeFossil(f.id);
+      if (!activeIds.has(f.id)) {
+        this.arService.removeFossil(f.id);
+        this.placedFossilIds.delete(f.id);
+      }
     });
 
     this.allFossils.set(active);
