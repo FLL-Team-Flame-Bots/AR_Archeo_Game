@@ -223,7 +223,7 @@ export class ArService {
     // Position is an origin-relative world-space offset (anchored to the GPS
     // origin captured at AR session start). Place directly — do NOT add the
     // camera position, or fossils drift as the player walks.
-    const y = this.groundY ?? position.y;
+    const y = this.groundY ?? 0;
     group.position.set(position.x, y, position.z);
     group.visible = this.markersVisible();
     this.scene.add(group);
@@ -278,7 +278,7 @@ export class ArService {
       color: 0xffd700, transparent: true, opacity: 0.55,
     });
     this.gridMesh = new THREE.LineSegments(geo, mat);
-    this.gridMesh.position.y = (this.groundY ?? -DEVICE_HEIGHT_M) + 0.02;
+    this.gridMesh.position.y = (this.groundY ?? 0) + 0.02;
     this.scene.add(this.gridMesh);
   }
 
@@ -389,20 +389,17 @@ export class ArService {
       }
       this.flushDebug(false);
     }
+    // Always push camera position even if hit-test is unavailable,
+    // so precisePosition stays up to date as the player walks.
+    this.flushDebug(false);
 
-    // Keep fossils seated on the ground. A fossil adopts the current ground
-    // height only when the player is within UPDATE_GROUND_R_M of it, so a
-    // fossil on flat grass doesn't jump when the player walks up a hill.
-    const currentGround   = this.groundY ?? -DEVICE_HEIGHT_M;
-    const UPDATE_GROUND_R = 4; // metres
+    // Keep all fossils seated on the ground. In WebXR local space the floor
+    // is at y≈0; we refine with hit-test when available.
+    const currentGround = this.groundY ?? 0;
 
     this.fossilMeshes.forEach((mesh) => {
       const g = mesh as unknown as THREE.Group;
-      const dx = g.position.x - this.camera.position.x;
-      const dz = g.position.z - this.camera.position.z;
-      if (dx * dx + dz * dz < UPDATE_GROUND_R * UPDATE_GROUND_R) {
-        g.position.y = currentGround;
-      }
+      g.position.y = currentGround;
       if (mesh.children[1]) mesh.children[1].rotation.z += 0.015;
       if (mesh.children[2]) {
         mesh.children[2].rotation.z -= 0.008;
