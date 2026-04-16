@@ -19,6 +19,8 @@ const ACTIVE_RADIUS_CELLS = 1;
 /** Player must be within this many metres of a fossil's GPS location to
  *  open its card. Stops you grabbing fossils from across the field. */
 const COLLECT_RADIUS_M = 1;
+/** Fossils within this range of the player are shown in AR. */
+const DISCOVERY_RADIUS_M = 40;
 
 /** Per-spawn rarity probabilities. Sum to 1. */
 const RARITY_WEIGHTS: Record<string, number> = {
@@ -466,20 +468,58 @@ export class ArViewComponent implements OnInit, OnDestroy {
     this.arService.setMarkersVisible(!this.arService.markersVisible());
   }
 
-  /** Bearing + distance to every active uncollected fossil, for the HUD radar/arrows. */
+  /** Bearing + distance to every active uncollected fossil, for the HUD radar/arrows.
+   *  Uses XR-derived precise position when AR is active. */
   fossilDirections = computed(() => {
-    const all     = this.allFossils();
+    const all = this.allFossils();
+    const pos = this.precisePosition();
     const heading = this.orientation.orientation()?.heading ?? 0;
-    if (!this.gps.playerPosition()) return [];
+    if (!pos) return [];
 
     return all
       .filter(f => !this.collectedIds.has(f.id) && !f.discovered)
       .map(f => {
-        const bearing  = this.gps.bearingTo(f);
+        const dLat = (f.lat - pos.lat) * 111_000;
+        const dLng = (f.lng - pos.lng) * 111_000 * Math.cos(pos.lat * Math.PI / 180);
+        const distance = Math.sqrt(dLat * dLat + dLng * dLng);
+        const bearing = ((Math.atan2(dLng, dLat) * 180) / Math.PI + 360) % 360;
         const relAngle = ((bearing - heading) % 360 + 360) % 360;
-        return { id: f.id, name: f.name, relAngle, distance: Math.round(this.gps.distanceTo(f)) };
+        return { id: f.id, name: f.name, relAngle, distance: Math.round(distance) };
       })
       .sort((a, b) => a.distance - b.distance);
+  });
+
+  /** Precise player lat/lng derived from XR camera displacement + GPS origin.
+   *  Falls back to raw GPS when AR isn't active yet. */
+  precisePosition = computed(() => {
+    const origin = this.originPos;
+    if (!origin || !this.arService.active()) {
+      return this.gps.playerPosition();
+    }
+    const cam = this.arService.cameraPosition();
+    const headingRef = this.orientation.headingReference()
+      ?? this.orientation.orientation()?.heading ?? 0;
+    const headRad = (headingRef * Math.PI) / 180;
+    // Reverse the XR→ENU rotation to get (dE, dN) in metres.
+    const dE =  cam.x * Math.cos(headRad) - cam.z * Math.sin(headRad);
+    const dN = -(cam.x * Math.sin(headRad) + cam.z * Math.cos(headRad));
+    const cosLat = Math.cos(origin.lat * Math.PI / 180);
+    return {
+      lat: origin.lat + dN / 111_000,
+      lng: origin.lng + dE / (111_000 * cosLat),
+      accuracy: 0.1,
+    };
+  });
+
+  /** Fossils within DISCOVERY_RADIUS_M of the precise player position. */
+  preciseNearby = computed(() => {
+    const pos = this.precisePosition();
+    if (!pos) return [];
+    return this.allFossils().filter(f => {
+      const dLat = (f.lat - pos.lat) * 111_000;
+      const dLng = (f.lng - pos.lng) * 111_000 * Math.cos(pos.lat * Math.PI / 180);
+      return dLat * dLat + dLng * dLng <= DISCOVERY_RADIUS_M * DISCOVERY_RADIUS_M;
+    });
   });
 
   constructor(
@@ -487,22 +527,22 @@ export class ArViewComponent implements OnInit, OnDestroy {
     public gps: GpsService,
     public orientation: OrientationService
   ) {
-    // On every GPS update: despawn fossils >100 m away, spawn to maintain density
+    // On every XR camera move (or GPS update before AR): replenish fossils
     effect(() => {
-      const pos = this.gps.playerPosition();
+      const pos = this.precisePosition();
       if (!pos) return;
       untracked(() => this.replenishFossils(pos));
     });
 
-    // Keep AR markers in sync with nearby fossils
+    // Keep AR markers in sync with nearby fossils (using XR-derived proximity)
     effect(() => {
-      const nearby = this.gps.nearbyFossils();
+      const nearby = this.preciseNearby();
       this.syncARMarkers(nearby);
     });
 
     // Redraw the AR grid overlay whenever the player crosses into a new cell.
     effect(() => {
-      const pos = this.gps.playerPosition();
+      const pos = this.precisePosition();
       const active = this.arService.active();
       const on = this.showGrid();
       if (!pos || !active || !on) return;

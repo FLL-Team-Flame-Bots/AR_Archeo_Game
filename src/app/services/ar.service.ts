@@ -22,6 +22,9 @@ export class ArService {
   loading = signal(false);
   error = signal<string | null>(null);
 
+  /** Camera position in XR world space, updated every frame. */
+  cameraPosition = signal<{ x: number; z: number }>({ x: 0, z: 0 });
+
   /** Whether fossil marker meshes are visible in the AR scene. */
   markersVisible = signal(true);
 
@@ -334,7 +337,10 @@ export class ArService {
     const h = this.debugHits;
     const r = this.debugRej;
     const last = this.debugLast;
+    const cx = this.camera.position.x;
+    const cz = this.camera.position.z;
     this.ngZone.run(() => {
+      this.cameraPosition.set({ x: cx, z: cz });
       this.groundYSignal.set(g);
       this.hitCount.set(h);
       this.rejectedCount.set(r);
