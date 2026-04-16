@@ -58,8 +58,11 @@ const RARITY_POINTS: Record<string, number> = {
           </div>
           <div class="fossil-count">{{ allFossils().length }} fossils hidden nearby</div>
 
-          <button class="start-ar-btn" (click)="onStartAR()" [disabled]="arService.loading()">
-            {{ arService.loading() ? '⏳ Starting...' : '📷 Start AR' }}
+          <button class="start-ar-btn" (click)="onStartAR()"
+                  [disabled]="arService.loading() || !gps.playerPosition()">
+            {{ arService.loading() ? '⏳ Starting...'
+               : !gps.playerPosition() ? '⏳ Waiting for GPS...'
+               : '📷 Start AR' }}
           </button>
 
           <p class="hint" *ngIf="!arService.supported()">
@@ -449,6 +452,8 @@ export class ArViewComponent implements OnInit, OnDestroy {
   /** "Walk closer — Xm away" toast shown when the player taps a far fossil. */
   tooFarToast = signal<string | null>(null);
   private tooFarTimeout = 0;
+  private captureTimeout = 0;
+  private captureOriginTimeout = 0;
   /** When false, the AR grid overlay is hidden. */
   showGrid = signal(true);
 
@@ -631,7 +636,7 @@ export class ArViewComponent implements OnInit, OnDestroy {
       const tryCapture = () => {
         if (this.orientation.captureHeadingReference()) return;
         if (Date.now() - start > 3000) return;
-        setTimeout(tryCapture, 100);
+        this.captureTimeout = window.setTimeout(tryCapture, 100);
       };
       tryCapture();
     }
@@ -658,7 +663,7 @@ export class ArViewComponent implements OnInit, OnDestroy {
         const p = this.gps.playerPosition();
         if (p) { this.originPos = p; completeOriginSetup(); return; }
         if (Date.now() - originStart > 3000) return;
-        setTimeout(tryCaptureOrigin, 100);
+        this.captureOriginTimeout = window.setTimeout(tryCaptureOrigin, 100);
       };
       tryCaptureOrigin();
     }
@@ -843,6 +848,10 @@ export class ArViewComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    clearTimeout(this.captureTimeout);
+    clearTimeout(this.captureOriginTimeout);
+    clearTimeout(this.tooFarTimeout);
+    clearTimeout(this.celebrateTimeout);
     this.gps.stopTracking();
     this.orientation.stop();
     this.orientation.clearHeadingReference();

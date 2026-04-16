@@ -1,6 +1,6 @@
 import {
   Component, Input, Output, EventEmitter,
-  ViewChild, ElementRef, AfterViewInit, NgZone
+  ViewChild, ElementRef, AfterViewInit, OnDestroy, NgZone
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FossilLocation } from '../../data/fossil.model';
@@ -208,7 +208,7 @@ import { FossilLocation } from '../../data/fossil.model';
     .collect-btn:active { transform: scale(0.97); }
   `]
 })
-export class FossilCardComponent implements AfterViewInit {
+export class FossilCardComponent implements AfterViewInit, OnDestroy {
   @Input() fossil!: FossilLocation;
   @Output() close   = new EventEmitter<void>();
   @Output() collect = new EventEmitter<FossilLocation>();
@@ -220,12 +220,28 @@ export class FossilCardComponent implements AfterViewInit {
   private ctx!: CanvasRenderingContext2D;
   private isDrawing = false;
   private strokeCount = 0;
+  private initTimeout = 0;
+  private onDownBound?: (e: PointerEvent) => void;
+  private onMoveBound?: (e: PointerEvent) => void;
+  private onUpBound?: () => void;
+  private onLeaveBound?: () => void;
 
   constructor(private ngZone: NgZone) {}
 
   ngAfterViewInit(): void {
     // Let layout settle before reading canvas dimensions
-    setTimeout(() => this.initCanvas(), 60);
+    this.initTimeout = window.setTimeout(() => this.initCanvas(), 60);
+  }
+
+  ngOnDestroy(): void {
+    clearTimeout(this.initTimeout);
+    const canvas = this.brushCanvasRef?.nativeElement;
+    if (canvas) {
+      if (this.onDownBound)  canvas.removeEventListener('pointerdown',  this.onDownBound);
+      if (this.onMoveBound)  canvas.removeEventListener('pointermove',  this.onMoveBound);
+      if (this.onUpBound)    canvas.removeEventListener('pointerup',    this.onUpBound);
+      if (this.onLeaveBound) canvas.removeEventListener('pointerleave', this.onLeaveBound);
+    }
   }
 
   // ── Canvas setup ──────────────────────────────────────────────────────────
@@ -238,11 +254,15 @@ export class FossilCardComponent implements AfterViewInit {
     this.drawSediment();
 
     // Attach pointer listeners outside Angular zone — no change detection per frame
+    this.onDownBound  = (e) => this.onDown(e);
+    this.onMoveBound  = (e) => this.onMove(e);
+    this.onUpBound    = () => { this.isDrawing = false; };
+    this.onLeaveBound = () => { this.isDrawing = false; };
     this.ngZone.runOutsideAngular(() => {
-      canvas.addEventListener('pointerdown',  (e) => this.onDown(e),  { passive: false });
-      canvas.addEventListener('pointermove',  (e) => this.onMove(e),  { passive: false });
-      canvas.addEventListener('pointerup',    ()  => this.isDrawing = false);
-      canvas.addEventListener('pointerleave', ()  => this.isDrawing = false);
+      canvas.addEventListener('pointerdown',  this.onDownBound!,  { passive: false });
+      canvas.addEventListener('pointermove',  this.onMoveBound!,  { passive: false });
+      canvas.addEventListener('pointerup',    this.onUpBound!);
+      canvas.addEventListener('pointerleave', this.onLeaveBound!);
     });
   }
 

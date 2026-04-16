@@ -346,6 +346,15 @@ export class ArService {
   private tick(frame: XRFrame | null): void {
     const t = performance.now() / 1000;
 
+    // Three.js copies cameraXR.matrixWorld onto the user camera but never
+    // writes back to camera.position — it stays (0, 0, 0) forever. Extract
+    // world position ourselves so cameraPosition/precisePosition can track
+    // the player as they walk.
+    if (this.renderer.xr.isPresenting) {
+      const xrCam = this.renderer.xr.getCamera();
+      this.camera.position.setFromMatrixPosition(xrCam.matrixWorld);
+    }
+
     // Sample the ground below the viewer each frame via WebXR hit-test.
     // Filter the raw hit: (1) horizontal surfaces only (reject walls, slopes,
     // car hoods), (2) sanity-range around the camera's y (reject ceilings and
@@ -400,6 +409,12 @@ export class ArService {
     this.fossilMeshes.forEach((mesh) => {
       const g = mesh as unknown as THREE.Group;
       g.position.y = currentGround;
+      // Scale with distance so a 0.08 m sphere stays readable past 5 m.
+      // At the 5 m collection radius it's normal-sized; at 30 m it's ~6×.
+      const dx = g.position.x - this.camera.position.x;
+      const dz = g.position.z - this.camera.position.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      g.scale.setScalar(Math.max(1, dist / 5));
       if (mesh.children[1]) mesh.children[1].rotation.z += 0.015;
       if (mesh.children[2]) {
         mesh.children[2].rotation.z -= 0.008;

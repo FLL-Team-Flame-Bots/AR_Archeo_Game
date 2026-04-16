@@ -4,9 +4,10 @@ An outdoor augmented reality archaeology game built by [FlameBots](https://flame
 
 ## How It Works
 
-- **GPS-based discovery** — Fossils are randomly scattered within 30–150 m of you when the app starts. Walk near one (within 30 m) to trigger it.
-- **AR overlay** — Once nearby, the fossil appears in your camera view positioned using your device's compass and gyroscope.
-- **Learn** — Each fossil has a name, rarity, and description to collect.
+- **Endless GPS grid** — The world is divided into 10 m cells. Each cell you enter rolls 0–2 fossils (25% empty, 50% one, 25% two) and remembers the result, so fossils persist but new ground always has fresh finds.
+- **Radar + AR overlay** — Fossils within 40 m appear in the AR camera view, anchored by compass bearing and gyroscope; the HUD radar points at everything active.
+- **Walk up to collect** — Get within 5 m to tap a fossil and start the "brush it clean" mini-game.
+- **Rarity + levels** — Every spawn rolls a rarity: ~74% common, 25% rare, 1% legendary, 0.01% chroma (epic fossils are hand-placed). Score scales with rarity (1 / 5 / 50 / 1000 pts) and feeds into the player level shown on the HUD.
 - **No backend required** — Fully client-side PWA. Works offline after first load.
 
 ## Tech Stack
