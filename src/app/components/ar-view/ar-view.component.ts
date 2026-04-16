@@ -24,14 +24,16 @@ const COLLECT_RADIUS_M = 1;
 const RARITY_WEIGHTS: Record<string, number> = {
   chroma:    0.0001,  // 0.01%
   legendary: 0.01,    // 1%
-  rare:      0.25,    // 25%
+  epic:      0.05,    // 5%
+  rare:      0.20,    // 20%
   common:    0.7399,  // ~74%
 };
 /** Score awarded when a fossil of each rarity is collected. */
 const RARITY_POINTS: Record<string, number> = {
-  common:    1,
-  rare:      5,
-  legendary: 50,
+  common:    5,
+  rare:      20,
+  epic:      50,
+  legendary: 200,
   chroma:    1000,
 };
 
@@ -256,6 +258,7 @@ const RARITY_POINTS: Record<string, number> = {
       background: rgba(0,0,0,0.25); border-left: 3px solid #6b7280;
     }
     .collection-item.rarity-rare      { border-left-color: #a855f7; }
+    .collection-item.rarity-epic      { border-left-color: #f43f5e; background: rgba(244,63,94,0.1); }
     .collection-item.rarity-legendary { border-left-color: #ffd700; background: rgba(255,215,0,0.1); }
     .collection-item.rarity-chroma {
       border-left: 3px solid transparent;
@@ -639,7 +642,7 @@ export class ArViewComponent implements OnInit, OnDestroy {
       if (existing) existing.count++;
       else map.set(baseId, { baseId, name: f.name, rarity: f.rarity, count: 1, emoji: this.emojiFor(baseId) });
     }
-    const order: Record<string, number> = { chroma: 0, legendary: 1, rare: 2, common: 3 };
+    const order: Record<string, number> = { chroma: 0, legendary: 1, epic: 2, rare: 3, common: 4 };
     return [...map.values()].sort((a, b) => (order[a.rarity] ?? 9) - (order[b.rarity] ?? 9));
   }
 
@@ -669,6 +672,7 @@ export class ArViewComponent implements OnInit, OnDestroy {
       'bronze-fibula-01': '📌', 'roman-coin-01': '🪙', 'obsidian-arrowhead-01': '🏹',
       'golden-torc-01': '📿', 'clay-tablet-01': '📜', 'iron-dagger-01': '🗡️',
       'human-femur-01': '🦴', 'wooden-post-01': '🪵', 'ivory-necklace-01': '💛',
+      'viking-brooch-01': '⚔️', 'egyptian-scarab-01': '🪲',
       'iridescent-prism-01': '🌈',
     };
     return m[baseId] ?? '🪨';

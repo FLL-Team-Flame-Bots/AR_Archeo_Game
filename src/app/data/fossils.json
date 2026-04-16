@@ -84,6 +84,34 @@
     "rarity": "rare"
   },
   {
+    "id": "viking-brooch-01",
+    "name": "Viking Silver Brooch",
+    "species": "Norse Culture",
+    "era": "Viking Age",
+    "period": "800–1100 AD",
+    "yearDiscovered": 1904,
+    "description": "A heavy silver brooch in the Borre style, used to pin a cloak at the shoulder. Viking brooches often doubled as portable wealth — if you needed silver, you simply cut a piece off.",
+    "funFact": "Many Viking brooches were made from melted-down foreign coins, blending Arabic, Byzantine and Anglo-Saxon silver into Norse art.",
+    "lat": 0,
+    "lng": 0,
+    "discovered": false,
+    "rarity": "epic"
+  },
+  {
+    "id": "egyptian-scarab-01",
+    "name": "Egyptian Scarab Seal",
+    "species": "Ancient Egyptian",
+    "era": "Bronze Age",
+    "period": "2000–1000 BCE",
+    "yearDiscovered": 1881,
+    "description": "A carved stone amulet in the shape of a dung beetle, with hieroglyphs on the flat side used as a personal seal. Scarabs were believed to channel the sun god Khepri's power of rebirth.",
+    "funFact": "Scarabs were so popular they were exported across the ancient Mediterranean — Egyptian scarabs have been found in Greek, Phoenician and Sardinian tombs.",
+    "lat": 0,
+    "lng": 0,
+    "discovered": false,
+    "rarity": "epic"
+  },
+  {
     "id": "golden-torc-01",
     "name": "Golden Torc",
     "species": "Celtic Nobility",
