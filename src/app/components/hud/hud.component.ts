@@ -17,10 +17,13 @@ export interface FossilDirection {
       <!-- Top bar -->
       <div class="top-bar">
         <div class="score-badge">
-          <span class="score-label">Collected</span>
-          <span class="score-value">{{ collected }}</span>
+          <span class="score-label">Score</span>
+          <span class="score-value">{{ score }}</span>
         </div>
-        <div class="title">AR Archaeology</div>
+        <div class="level-badge" [ngClass]="'level-' + levelKey">
+          <span class="level-label">Level</span>
+          <span class="level-value">{{ levelName }}</span>
+        </div>
         <div class="gps-badge" [class.gps-ok]="gpsActive" [class.gps-error]="!gpsActive">
           {{ gpsActive ? '📍 GPS' : '⚠️ No GPS' }}
         </div>
@@ -79,7 +82,7 @@ export interface FossilDirection {
       </ng-container>
 
       <!-- Version stamp -->
-      <div class="version-stamp">v3.1.1</div>
+      <div class="version-stamp">v3.2.0</div>
 
       <!-- Bottom bar -->
       <div class="bottom-bar">
@@ -97,15 +100,22 @@ export interface FossilDirection {
       padding: 12px 16px; background: linear-gradient(180deg, rgba(0,0,0,0.7) 0%, transparent 100%);
       pointer-events: all;
     }
-    .score-badge, .gps-badge {
+    .score-badge, .gps-badge, .level-badge {
       background: rgba(0,0,0,0.5); border-radius: 20px; padding: 4px 10px;
       font-size: 12px; color: #f5e6c8; font-weight: 600;
     }
-    .score-label { display: block; font-size: 9px; text-transform: uppercase; color: #c8a86b; }
+    .score-label, .level-label { display: block; font-size: 9px; text-transform: uppercase; color: #c8a86b; }
     .score-value { display: block; font-size: 16px; font-weight: 700; }
+    .level-value { display: block; font-size: 13px; font-weight: 700; }
+    .level-novice      .level-value { color: #9ca3af; }
+    .level-apprentice  .level-value { color: #a3e635; }
+    .level-explorer    .level-value { color: #4ade80; }
+    .level-specialist  .level-value { color: #38bdf8; }
+    .level-expert      .level-value { color: #a855f7; }
+    .level-master      .level-value { color: #ffd700; }
+    .level-grand-master .level-value { color: #f43f5e; text-shadow: 0 0 6px rgba(244,63,94,0.6); }
     .gps-ok    { color: #4ade80; }
     .gps-error { color: #f87171; }
-    .title { font-size: 16px; font-weight: 700; color: #f5e6c8; text-shadow: 0 1px 4px rgba(0,0,0,0.8); }
 
     .nearby-panel {
       margin: 8px 16px 0; background: rgba(139,105,20,0.85); color: #fff;
@@ -191,6 +201,7 @@ export interface FossilDirection {
 export class HudComponent {
   @Input() collected = 0;
   @Input() total = 0;
+  @Input() score = 0;
   @Input() nearbyCount = 0;
   @Input() gpsActive = false;
   @Input() showARPrompt = false;
@@ -201,6 +212,22 @@ export class HudComponent {
   @Output() openMap     = new EventEmitter<void>();
   @Output() openCollection = new EventEmitter<void>();
   @Output() openLearn   = new EventEmitter<void>();
+
+  private static readonly LEVELS: [number, string, string][] = [
+    [5000, 'Grand Master', 'grand-master'],
+    [2500, 'Master',       'master'],
+    [1000, 'Expert',       'expert'],
+    [400,  'Specialist',   'specialist'],
+    [150,  'Explorer',     'explorer'],
+    [50,   'Apprentice',   'apprentice'],
+    [0,    'Novice',       'novice'],
+  ];
+
+  get levelName(): string { return this.levelEntry[1]; }
+  get levelKey(): string  { return this.levelEntry[2]; }
+  private get levelEntry(): [number, string, string] {
+    return HudComponent.LEVELS.find(([min]) => this.score >= min) ?? HudComponent.LEVELS.at(-1)!;
+  }
 
   trackById(_: number, f: { id: string }) { return f.id; }
 

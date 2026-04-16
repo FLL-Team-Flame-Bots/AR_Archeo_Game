@@ -75,6 +75,7 @@ const RARITY_POINTS: Record<string, number> = {
         <app-hud
           [collected]="collectedIds.size"
           [total]="(fossilTemplates).length"
+          [score]="score()"
           [nearbyCount]="gps.nearbyFossils().length"
           [gpsActive]="!!gps.playerPosition()"
           [showARPrompt]="!arService.active() && arService.supported()"
