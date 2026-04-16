@@ -237,6 +237,12 @@ export class ArService {
     this.fossilMeshes.forEach(mesh => { mesh.visible = visible; });
   }
 
+  xrDistanceTo(fossilId: string): number {
+    const mesh = this.fossilMeshes.get(fossilId);
+    if (!mesh) return Infinity;
+    return this.camera.position.distanceTo(mesh.position);
+  }
+
   setTapHandler(fn: (fossilId: string) => void): void {
     this.tapHandler = fn;
   }

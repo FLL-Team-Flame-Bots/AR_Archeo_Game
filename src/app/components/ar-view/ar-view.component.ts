@@ -551,7 +551,7 @@ export class ArViewComponent implements OnInit, OnDestroy {
       const fossil = this.allFossils()
         .find(f => f.id === fossilId && !this.collectedIds.has(f.id) && !f.discovered);
       if (!fossil) return;
-      const distM = this.gps.distanceTo(fossil);
+      const distM = this.arService.xrDistanceTo(fossilId);
       if (distM > COLLECT_RADIUS_M) {
         this.tooFarToast.set(`Walk closer — ${Math.round(distM)} m away`);
         clearTimeout(this.tooFarTimeout);
