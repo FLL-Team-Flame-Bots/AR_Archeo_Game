@@ -1,6 +1,6 @@
 {
   "configVersion": 1,
-  "timestamp": 1776462801368,
+  "timestamp": 1776468087047,
   "index": "/index.html",
   "assetGroups": [
     {
@@ -13,7 +13,7 @@
       "urls": [
         "/favicon.ico",
         "/index.html",
-        "/main-AZBJMNZZ.js",
+        "/main-U7BWWQQL.js",
         "/manifest.webmanifest",
         "/styles-2WUX2SJC.css"
       ],
@@ -50,8 +50,8 @@
     "/icons/icon-512x512.png": "8cc7b4290b668f1c6b22a551bd48ec54aa9457b1",
     "/icons/icon-72x72.png": "9a3b902f2564097c269c16d5ad2d693a7a7e3942",
     "/icons/icon-96x96.png": "65d9580d61f1d547102cd63e0ebe09ddc0adc445",
-    "/index.html": "c467a30563bd12f14ded183106f6f5e2bb68f021",
-    "/main-AZBJMNZZ.js": "82f077f59c7d0d953e970f550166d54e69bb31b6",
+    "/index.html": "cc31b8d66c04533a430fe007ee389063a0dba7aa",
+    "/main-U7BWWQQL.js": "a97b03c6d2a29489f40f7051090c65d0c6d85b63",
     "/manifest.webmanifest": "bebd7cf52ef51f077758605b8f9a495c70882b98",
     "/styles-2WUX2SJC.css": "07aa2664af6e4d68da311ae8dfe00f5f11725110"
   },
