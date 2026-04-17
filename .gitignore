@@ -48,3 +48,8 @@ Thumbs.db
 firebase-debug.log
 firestore-debug.log
 ui-debug.log
+
+# Firebase Agent Skills — locally generated reference docs for AI tools
+.agents/
+.claude/
+skills-lock.json
