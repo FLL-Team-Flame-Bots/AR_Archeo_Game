@@ -82,12 +82,13 @@ export interface FossilDirection {
       </ng-container>
 
       <!-- Version stamp -->
-      <div class="version-stamp">v3.3.4</div>
+      <div class="version-stamp">v4.0.0</div>
 
       <!-- Bottom bar -->
       <div class="bottom-bar">
         <button class="icon-btn" (click)="openMap.emit()">🗺️<span>Map</span></button>
         <button class="icon-btn" (click)="openCollection.emit()">🦴<span>Collection</span></button>
+        <button class="icon-btn" (click)="openLeaderboard.emit()">🏆<span>Ranks</span></button>
         <button class="icon-btn" (click)="openLearn.emit()">📚<span>Learn</span></button>
       </div>
     </div>
@@ -235,6 +236,7 @@ export class HudComponent {
   @Output() openMap     = new EventEmitter<void>();
   @Output() openCollection = new EventEmitter<void>();
   @Output() openLearn   = new EventEmitter<void>();
+  @Output() openLeaderboard = new EventEmitter<void>();
 
   private static readonly LEVELS: [number, string, string][] = [
     [5000, 'Scholar',      'scholar'],

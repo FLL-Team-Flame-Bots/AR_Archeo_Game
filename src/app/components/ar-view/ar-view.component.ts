@@ -9,7 +9,15 @@ import { FossilLocation } from '../../data/fossil.model';
 import { FossilCardComponent } from '../fossil-card/fossil-card.component';
 import { HudComponent } from '../hud/hud.component';
 import { OrientationService, DEVICE_HEIGHT_M } from '../../services/orientation.service';
+import { AccountService } from '../../services/account.service';
+import { LeaderboardService } from '../../services/leaderboard.service';
+import { DisplayNameComponent } from '../display-name/display-name.component';
+import { LeaderboardComponent } from '../leaderboard/leaderboard.component';
 import fossilTemplates from '../../data/fossils.json';
+
+/** localStorage keys for client-side collection persistence. */
+const LS_COLLECTION = 'aragame.collectedFossils';
+const LS_CELL_STATES = 'aragame.cellStates';
 
 /** Grid cell size (m). Each cell ever produces at most one fossil. */
 const AREA_CELL_M = 10;
@@ -44,7 +52,7 @@ const SHINY_CHANCE = 0.01;
 @Component({
   selector: 'app-ar-view',
   standalone: true,
-  imports: [CommonModule, FossilCardComponent, HudComponent],
+  imports: [CommonModule, FossilCardComponent, HudComponent, DisplayNameComponent, LeaderboardComponent],
   template: `
     <div class="ar-container">
 
@@ -93,7 +101,20 @@ const SHINY_CHANCE = 0.01;
           (startAR)="onStartAR()"
           (openMap)="showMap = true"
           (openCollection)="showCollection.set(true)"
+          (openLeaderboard)="showLeaderboard.set(true)"
           (openLearn)="showLearn = true"
+        />
+
+        <!-- First-launch name prompt -->
+        <app-display-name
+          *ngIf="needsDisplayName()"
+          (submitted)="onDisplayNameSubmitted($event)"
+        />
+
+        <!-- Leaderboard modal -->
+        <app-leaderboard
+          *ngIf="showLeaderboard()"
+          (close)="showLeaderboard.set(false)"
         />
 
         <!-- Fossil card popup -->
@@ -442,6 +463,11 @@ export class ArViewComponent implements OnInit, OnDestroy {
   showMap = false;
   showCollection = signal(false);
   showLearn = false;
+  showLeaderboard = signal(false);
+  /** Modal gate: true while we have a Firebase user but no chosen name. */
+  needsDisplayName = computed(
+    () => !!this.account.user() && !this.account.displayName(),
+  );
 
   private spawnCounter = 0;
   /** GPS coords captured at AR session start. Fossil world-space positions
@@ -538,8 +564,14 @@ export class ArViewComponent implements OnInit, OnDestroy {
   constructor(
     public arService: ArService,
     public gps: GpsService,
-    public orientation: OrientationService
+    public orientation: OrientationService,
+    public account: AccountService,
+    public leaderboard: LeaderboardService,
   ) {
+    // Rehydrate the player's collection from their last session so scores
+    // and the collection panel survive a refresh.
+    this.loadFromLocalStorage();
+
     // On every XR camera move (or GPS update before AR): replenish fossils
     effect(() => {
       const pos = this.precisePosition();
@@ -561,6 +593,70 @@ export class ArViewComponent implements OnInit, OnDestroy {
       if (!pos || !active || !on) return;
       untracked(() => this.refreshGridOverlay(pos));
     });
+
+    // Persist the collection to localStorage whenever it changes.
+    effect(() => {
+      const fossils = this.collectedFossils();
+      untracked(() => this.saveCollectionToStorage(fossils));
+    });
+
+    // Push the player's score to the leaderboard on every change, once the
+    // account is ready. The leaderboard service debounces writes so this is
+    // safe to call on every signal tick.
+    effect(() => {
+      const s = this.score();
+      const count = this.collectedFossils().length;
+      const ready = this.account.ready();
+      if (!ready) return;
+      untracked(() => this.leaderboard.syncScore(s, count));
+    });
+  }
+
+  onDisplayNameSubmitted(name: string): void {
+    void this.account.setDisplayName(name);
+  }
+
+  // ── Local persistence ────────────────────────────────────────────────────
+
+  private loadFromLocalStorage(): void {
+    try {
+      const raw = localStorage.getItem(LS_COLLECTION);
+      if (raw) {
+        const parsed = JSON.parse(raw) as FossilLocation[];
+        if (Array.isArray(parsed)) {
+          this.collectedFossils.set(parsed);
+          parsed.forEach(f => this.collectedIds.add(f.id));
+        }
+      }
+      const cellRaw = localStorage.getItem(LS_CELL_STATES);
+      if (cellRaw) {
+        const parsed = JSON.parse(cellRaw) as Record<
+          string,
+          { fossils: FossilLocation[]; collected: string[] }
+        >;
+        for (const [key, rec] of Object.entries(parsed)) {
+          this.cellStates.set(key, {
+            fossils: rec.fossils,
+            collected: new Set(rec.collected),
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load from localStorage', e);
+    }
+  }
+
+  private saveCollectionToStorage(fossils: FossilLocation[]): void {
+    try {
+      localStorage.setItem(LS_COLLECTION, JSON.stringify(fossils));
+      const cellObj: Record<string, { fossils: FossilLocation[]; collected: string[] }> = {};
+      for (const [key, rec] of this.cellStates) {
+        cellObj[key] = { fossils: rec.fossils, collected: [...rec.collected] };
+      }
+      localStorage.setItem(LS_CELL_STATES, JSON.stringify(cellObj));
+    } catch (e) {
+      console.warn('Failed to save to localStorage', e);
+    }
   }
 
   /** Builds a 5×5 ring of cells around the player's current cell and pushes
