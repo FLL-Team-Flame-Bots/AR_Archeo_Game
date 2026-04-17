@@ -11,5 +11,7 @@ export interface FossilLocation {
   lng: number;
   discovered: boolean;
   rarity: 'common' | 'rare' | 'epic' | 'legendary' | 'chroma';
+  /** Shiny variant: 1% spawn rate, doubles points, distinct visuals. */
+  shiny?: boolean;
   imageUrl?: string;
 }

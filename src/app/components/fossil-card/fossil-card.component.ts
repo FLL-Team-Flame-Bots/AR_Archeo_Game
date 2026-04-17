@@ -10,12 +10,15 @@ import { FossilLocation } from '../../data/fossil.model';
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="fossil-card" [class]="'rarity-' + fossil.rarity">
+    <div class="fossil-card" [class]="'rarity-' + fossil.rarity" [class.shiny]="fossil.shiny">
 
       <!-- ── Brush phase ── -->
       <div class="brush-phase" [class.hidden-phase]="phase !== 'brushing'">
         <div class="card-header">
-          <span class="rarity-badge">{{ rarityLabel }}</span>
+          <div class="header-badges">
+            <span class="rarity-badge">{{ rarityLabel }}</span>
+            <span class="shiny-badge" *ngIf="fossil.shiny">✨ SHINY</span>
+          </div>
           <button class="close-btn" (click)="close.emit()">✕</button>
         </div>
 
@@ -38,7 +41,10 @@ import { FossilLocation } from '../../data/fossil.model';
       <!-- ── Revealed phase ── -->
       <div class="reveal-phase" [class.hidden-phase]="phase !== 'revealed'">
         <div class="card-header">
-          <span class="rarity-badge">{{ rarityLabel }}</span>
+          <div class="header-badges">
+            <span class="rarity-badge">{{ rarityLabel }}</span>
+            <span class="shiny-badge" *ngIf="fossil.shiny">✨ SHINY</span>
+          </div>
           <button class="close-btn" (click)="close.emit()">✕</button>
         </div>
 
@@ -150,6 +156,7 @@ import { FossilLocation } from '../../data/fossil.model';
       display: flex; justify-content: space-between; align-items: center;
       margin-bottom: 12px;
     }
+    .header-badges { display: flex; align-items: center; gap: 6px; }
     .rarity-badge {
       font-size: 11px; font-weight: 700; text-transform: uppercase;
       letter-spacing: 1px; padding: 3px 8px; border-radius: 4px;
@@ -163,6 +170,17 @@ import { FossilLocation } from '../../data/fossil.model';
     .rarity-legendary { border-color: #ffd700; box-shadow: 0 0 20px rgba(255,215,0,0.3); }
     .rarity-rare      { border-color: #a855f7; box-shadow: 0 0 20px rgba(168,85,247,0.3); }
     .rarity-common    { border-color: #6b7280; }
+    .fossil-card.shiny {
+      border-color: #ffe080;
+      box-shadow: 0 0 28px rgba(255,224,128,0.6), 0 8px 32px rgba(0,0,0,0.6);
+    }
+    .shiny-badge {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 1px; padding: 3px 8px; border-radius: 4px;
+      background: linear-gradient(90deg, #ffd700, #ffffff, #ffd700);
+      color: #000;
+      margin-left: 6px;
+    }
     .rarity-chroma {
       border: 2px solid transparent;
       background:

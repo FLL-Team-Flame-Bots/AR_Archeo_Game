@@ -30,7 +30,7 @@ const RARITY_WEIGHTS: Record<string, number> = {
   rare:      0.20,    // 20%
   common:    0.7399,  // ~74%
 };
-/** Score awarded when a fossil of each rarity is collected. */
+/** Score awarded when a fossil of each rarity is collected. Shinies double. */
 const RARITY_POINTS: Record<string, number> = {
   common:    5,
   rare:      20,
@@ -38,6 +38,8 @@ const RARITY_POINTS: Record<string, number> = {
   legendary: 200,
   chroma:    1000,
 };
+/** Probability a freshly spawned fossil is shiny (any rarity). */
+const SHINY_CHANCE = 0.01;
 
 @Component({
   selector: 'app-ar-view',
@@ -86,6 +88,8 @@ const RARITY_POINTS: Record<string, number> = {
           [showARPrompt]="!arService.active() && arService.supported()"
           [arActive]="arService.active()"
           [fossilDirections]="fossilDirections()"
+          [hasChroma]="hasChroma()"
+          [hasShinyChroma]="hasShinyChroma()"
           (startAR)="onStartAR()"
           (openMap)="showMap = true"
           (openCollection)="showCollection.set(true)"
@@ -124,11 +128,12 @@ const RARITY_POINTS: Record<string, number> = {
                 No fossils yet — go find some!
               </p>
               <div class="collection-item" *ngFor="let g of collectionGrouped"
-                   [class]="'rarity-' + g.rarity">
-                <span class="collection-emoji">{{ g.emoji }}</span>
+                   [class]="'rarity-' + g.rarity"
+                   [class.shiny]="g.shiny">
+                <span class="collection-emoji">{{ g.shiny ? '✨' : '' }}{{ g.emoji }}</span>
                 <div class="collection-meta">
-                  <div class="collection-name">{{ g.name }}</div>
-                  <div class="collection-rarity">{{ g.rarity }} · {{ pointsFor(g.rarity) }} pt</div>
+                  <div class="collection-name">{{ g.shiny ? 'Shiny ' : '' }}{{ g.name }}</div>
+                  <div class="collection-rarity">{{ g.rarity }}{{ g.shiny ? ' · shiny' : '' }} · {{ g.points }} pt</div>
                 </div>
                 <span class="collection-count" *ngIf="g.count > 1">×{{ g.count }}</span>
               </div>
@@ -136,19 +141,18 @@ const RARITY_POINTS: Record<string, number> = {
           </div>
         </div>
 
-        <!-- Celebration overlay (epic / legendary / chroma) -->
+        <!-- Celebration overlay (epic / legendary / chroma / any shiny) -->
         <div class="celebration" *ngIf="celebrating() as f"
              [class.celebration-chroma]="f.rarity === 'chroma'"
-             [class.celebration-epic]="f.rarity === 'epic'">
+             [class.celebration-epic]="f.rarity === 'epic'"
+             [class.celebration-shiny]="!!f.shiny">
           <div class="celebration-confetti">
-            <span *ngFor="let i of confettiPieces">{{ confettiEmoji(f.rarity) }}</span>
+            <span *ngFor="let i of confettiPieces">{{ confettiEmoji(f) }}</span>
           </div>
           <div class="celebration-text">
-            <div class="celebration-banner">
-              {{ f.rarity === 'chroma' ? '⟡ CHROMA ⟡' : f.rarity === 'legendary' ? 'LEGENDARY!' : 'EPIC!' }}
-            </div>
-            <div class="celebration-name">{{ f.name }}</div>
-            <div class="celebration-points">+{{ pointsFor(f.rarity) }} points</div>
+            <div class="celebration-banner">{{ celebrationBanner(f) }}</div>
+            <div class="celebration-name">{{ f.shiny ? 'Shiny ' : '' }}{{ f.name }}</div>
+            <div class="celebration-points">+{{ pointsFor(f) }} points</div>
           </div>
         </div>
 
@@ -178,14 +182,6 @@ const RARITY_POINTS: Record<string, number> = {
                   [class.on]="showGrid()">
             Grid: {{ showGrid() ? 'ON' : 'OFF' }}
           </button>
-          <button class="grid-toggle" (click)="toggleMarkers()"
-                  [class.on]="arService.markersVisible()">
-            Markers: {{ arService.markersVisible() ? 'ON' : 'OFF' }}
-          </button>
-          <div class="debug-row">
-            <button class="debug-btn legendary" (click)="debugCollect('legendary')">+Legendary</button>
-            <button class="debug-btn chroma"    (click)="debugCollect('chroma')">+Chroma</button>
-          </div>
         </div>
       </div>
     </div>
@@ -274,6 +270,12 @@ const RARITY_POINTS: Record<string, number> = {
         linear-gradient(90deg, #ff0040, #ffe000, #00e060, #00c0ff, #ff00d0) border-box;
       animation: chromaSpin 6s linear infinite;
     }
+    .collection-item.shiny {
+      border-left-color: #ffe080;
+      background: linear-gradient(90deg, rgba(255,224,128,0.22), rgba(255,255,255,0.08));
+      box-shadow: inset 0 0 14px rgba(255,224,128,0.25);
+    }
+    .collection-item.shiny .collection-name { color: #fff4c2; }
     .collection-emoji { font-size: 26px; }
     .collection-meta { flex: 1; }
     .collection-name { font-size: 14px; font-weight: 600; }
@@ -304,6 +306,16 @@ const RARITY_POINTS: Record<string, number> = {
       background: radial-gradient(circle at center,
         rgba(255,0,150,0.35), rgba(0,200,255,0.25), transparent 70%);
       animation: celebFadeChroma 4.4s ease-out forwards;
+    }
+    .celebration.celebration-shiny {
+      background: radial-gradient(circle at center,
+        rgba(255,230,140,0.45), rgba(255,255,255,0.15), transparent 65%);
+      animation: celebFadeEpic 2.2s ease-out forwards;
+    }
+    .celebration.celebration-shiny .celebration-banner {
+      background: linear-gradient(90deg, #ffe080, #ffffff, #ffd700);
+      -webkit-background-clip: text; background-clip: text;
+      color: transparent;
     }
     @keyframes celebFade {
       0%, 70% { opacity: 1; } 100% { opacity: 0; }
@@ -394,17 +406,6 @@ const RARITY_POINTS: Record<string, number> = {
       border-radius: 4px; cursor: pointer; pointer-events: all;
     }
     .grid-toggle.on { background: rgba(255,215,0,0.25); color: #ffd700; }
-    .debug-row { display: flex; gap: 4px; margin-top: 4px; }
-    .debug-btn {
-      flex: 1; padding: 3px 6px; border: none; border-radius: 4px;
-      font-family: monospace; font-size: 10px; font-weight: 700;
-      cursor: pointer; pointer-events: all; color: #000;
-    }
-    .debug-btn.legendary { background: #ffd700; }
-    .debug-btn.chroma {
-      background: linear-gradient(90deg, #ff0040, #ffe000, #00e060, #00c0ff, #ff00d0);
-      color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.5);
-    }
   `]
 })
 export class ArViewComponent implements OnInit, OnDestroy {
@@ -418,9 +419,20 @@ export class ArViewComponent implements OnInit, OnDestroy {
   collectedIds = new Set<string>();
   /** Every fossil the player has collected, in collection order. */
   collectedFossils = signal<FossilLocation[]>([]);
-  /** Total points earned. Each rarity contributes RARITY_POINTS. */
+  /** Total points earned. Each rarity contributes RARITY_POINTS; shinies double. */
   score = computed(() =>
-    this.collectedFossils().reduce((s, f) => s + (RARITY_POINTS[f.rarity] ?? 0), 0)
+    this.collectedFossils().reduce(
+      (s, f) => s + (RARITY_POINTS[f.rarity] ?? 0) * (f.shiny ? 2 : 1),
+      0,
+    )
+  );
+  /** Unlocks the "Chromaturge" easter-egg level. */
+  hasChroma = computed(() =>
+    this.collectedFossils().some(f => f.rarity === 'chroma'),
+  );
+  /** Unlocks the "Star-Touched" easter-egg level. */
+  hasShinyChroma = computed(() =>
+    this.collectedFossils().some(f => f.rarity === 'chroma' && f.shiny),
   );
   selectedFossil = signal<FossilLocation | null>(null);
   /** Set briefly after collecting a legendary or chroma fossil — drives the
@@ -467,10 +479,6 @@ export class ArViewComponent implements OnInit, OnDestroy {
       const pos = this.gps.playerPosition();
       if (pos) this.refreshGridOverlay(pos);
     }
-  }
-
-  toggleMarkers(): void {
-    this.arService.setMarkersVisible(!this.arService.markersVisible());
   }
 
   /** Bearing + distance to every active uncollected fossil, for the HUD radar/arrows.
@@ -680,8 +688,9 @@ export class ArViewComponent implements OnInit, OnDestroy {
     this.allFossils.update(list => list.filter(f => f.id !== fossil.id));
     this.gps.loadFossils(this.allFossils());
 
-    // Celebrate epic, legendary and chroma drops with an overlay.
-    if (fossil.rarity === 'epic' || fossil.rarity === 'legendary' || fossil.rarity === 'chroma') {
+    // Celebrate epic/legendary/chroma drops AND any shiny variant.
+    const isHighRarity = fossil.rarity === 'epic' || fossil.rarity === 'legendary' || fossil.rarity === 'chroma';
+    if (isHighRarity || fossil.shiny) {
       this.celebrating.set(fossil);
       clearTimeout(this.celebrateTimeout);
       const duration = fossil.rarity === 'chroma' ? 4500
@@ -693,37 +702,49 @@ export class ArViewComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Collected fossils grouped by template id, with count + rarity. */
-  get collectionGrouped(): Array<{ baseId: string; name: string; rarity: string; count: number; emoji: string }> {
-    const map = new Map<string, { baseId: string; name: string; rarity: string; count: number; emoji: string }>();
-    for (const f of this.collectedFossils()) {
-      const baseId = f.id.split('_')[0];
-      const existing = map.get(baseId);
-      if (existing) existing.count++;
-      else map.set(baseId, { baseId, name: f.name, rarity: f.rarity, count: 1, emoji: this.emojiFor(baseId) });
-    }
-    const order: Record<string, number> = { chroma: 0, legendary: 1, epic: 2, rare: 3, common: 4 };
-    return [...map.values()].sort((a, b) => (order[a.rarity] ?? 9) - (order[b.rarity] ?? 9));
+  /** Banner text for the celebration overlay. */
+  celebrationBanner(f: FossilLocation): string {
+    const r = f.rarity;
+    if (r === 'chroma')    return f.shiny ? '⟡ SHINY CHROMA ⟡' : '⟡ CHROMA ⟡';
+    if (r === 'legendary') return f.shiny ? '✨ SHINY LEGENDARY ✨' : 'LEGENDARY!';
+    if (r === 'epic')      return f.shiny ? '✨ SHINY EPIC ✨' : 'EPIC!';
+    if (r === 'rare')      return '✨ SHINY RARE ✨';
+    return '✨ SHINY FIND ✨';
   }
 
-  pointsFor(rarity: string): number { return RARITY_POINTS[rarity] ?? 0; }
-
-  /** Test helper: fabricate a fossil of the given rarity and run it through
-   *  the normal collection flow so the celebration + collection panel update. */
-  debugCollect(rarity: string): void {
-    const tpl = this.fossilTemplates.find(t => t.rarity === rarity);
-    if (!tpl) return;
-    this.spawnCounter++;
-    this.onCollect({
-      ...tpl,
-      id: `debug_${tpl.id}_${this.spawnCounter}`,
-      lat: 0, lng: 0, discovered: false,
+  /** Collected fossils grouped by template id + shiny state, with count + rarity.
+   *  Shiny and non-shiny of the same template are separate groups. */
+  get collectionGrouped(): Array<{ baseId: string; name: string; rarity: string; shiny: boolean; count: number; emoji: string; points: number }> {
+    type Group = { baseId: string; name: string; rarity: string; shiny: boolean; count: number; emoji: string; points: number };
+    const map = new Map<string, Group>();
+    for (const f of this.collectedFossils()) {
+      const baseId = f.id.split('_')[0];
+      const key = baseId + (f.shiny ? ':shiny' : '');
+      const existing = map.get(key);
+      if (existing) existing.count++;
+      else map.set(key, {
+        baseId, name: f.name, rarity: f.rarity, shiny: !!f.shiny, count: 1,
+        emoji: this.emojiFor(baseId),
+        points: (RARITY_POINTS[f.rarity] ?? 0) * (f.shiny ? 2 : 1),
+      });
+    }
+    const order: Record<string, number> = { chroma: 0, legendary: 1, epic: 2, rare: 3, common: 4 };
+    return [...map.values()].sort((a, b) => {
+      const r = (order[a.rarity] ?? 9) - (order[b.rarity] ?? 9);
+      if (r !== 0) return r;
+      return a.shiny === b.shiny ? 0 : (a.shiny ? -1 : 1);
     });
   }
 
+  /** Score for a single fossil or group — doubles for shinies. */
+  pointsFor(f: { rarity: string; shiny?: boolean }): number {
+    return (RARITY_POINTS[f.rarity] ?? 0) * (f.shiny ? 2 : 1);
+  }
+
   confettiPieces = Array.from({ length: 24 }, (_, i) => i);
-  confettiEmoji(rarity: string): string {
-    return rarity === 'chroma' ? '🌈' : rarity === 'epic' ? '🔥' : '✨';
+  confettiEmoji(f: FossilLocation): string {
+    if (f.shiny) return '🌟';
+    return f.rarity === 'chroma' ? '🌈' : f.rarity === 'epic' ? '🔥' : '✨';
   }
 
   private emojiFor(baseId: string): string {
@@ -733,6 +754,14 @@ export class ArViewComponent implements OnInit, OnDestroy {
       'golden-torc-01': '📿', 'clay-tablet-01': '📜', 'iron-dagger-01': '🗡️',
       'human-femur-01': '🦴', 'wooden-post-01': '🪵', 'ivory-necklace-01': '💛',
       'viking-brooch-01': '⚔️', 'egyptian-scarab-01': '🪲',
+      'mammoth-tooth-01': '🦷', 'glass-trade-bead-01': '🔵',
+      'bone-die-01': '🎲', 'iron-nail-01': '🔩',
+      'loom-weight-01': '🧵', 'horseshoe-01': '🐴',
+      'stone-mortar-01': '🥣', 'bronze-mirror-01': '🪞',
+      'amber-pendant-01': '🟠', 'seal-matrix-01': '🔏',
+      'anglo-saxon-sword-01': '🛡️', 'greek-vase-01': '⚱️',
+      'shang-oracle-bone-01': '🔮', 'mayan-jade-mask-01': '🟢',
+      'gladiator-helmet-01': '🪖',
       'iridescent-prism-01': '🌈',
     };
     return m[baseId] ?? '🪨';
@@ -799,7 +828,8 @@ export class ArViewComponent implements OnInit, OnDestroy {
       ? candidates[Math.floor(Math.random() * candidates.length)]
       : this.fossilTemplates[0];
     this.spawnCounter++;
-    return { ...tpl, id: `${tpl.id}_${Date.now()}_${this.spawnCounter}`, lat, lng, discovered: false };
+    const shiny = Math.random() < SHINY_CHANCE;
+    return { ...tpl, id: `${tpl.id}_${Date.now()}_${this.spawnCounter}`, lat, lng, discovered: false, shiny };
   }
 
   /** Weighted random rarity pick honouring RARITY_WEIGHTS. */
@@ -840,7 +870,7 @@ export class ArViewComponent implements OnInit, OnDestroy {
       const x =  dE * Math.cos(headRad) - dN * Math.sin(headRad);
       const z = -(dE * Math.sin(headRad) + dN * Math.cos(headRad));
       const y = -DEVICE_HEIGHT_M;
-      this.arService.placeFossil(f.id, new THREE.Vector3(x, y, z));
+      this.arService.placeFossil(f.id, new THREE.Vector3(x, y, z), !!f.shiny);
       this.placedFossilIds.add(f.id);
     });
 

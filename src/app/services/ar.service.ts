@@ -25,9 +25,6 @@ export class ArService {
   /** Camera position in XR world space, updated every frame. */
   cameraPosition = signal<{ x: number; z: number }>({ x: 0, z: 0 });
 
-  /** Whether fossil marker meshes are visible in the AR scene. */
-  markersVisible = signal(true);
-
   /** Debug readouts for the on-screen floor-detection panel. */
   groundYSignal = signal<number | null>(null);
   hitCount      = signal(0);
@@ -181,40 +178,23 @@ export class ArService {
     if (this.renderer) this.renderer.setAnimationLoop(null);
   }
 
-  placeFossil(id: string, position: THREE.Vector3): void {
+  placeFossil(id: string, position: THREE.Vector3, shiny = false): void {
     if (this.fossilMeshes.has(id)) return;
 
     const group = new THREE.Group();
 
-    // children[0] — visible sphere body
+    // children[0] — visible sphere body (shinies get a bright emissive sheen)
     const bodyGeo = new THREE.SphereGeometry(0.08, 10, 10);
-    const material = new THREE.MeshStandardMaterial({ color: 0xc8a86b, roughness: 0.6, metalness: 0.2 });
+    const material = shiny
+      ? new THREE.MeshStandardMaterial({
+          color: 0xfff4c2, roughness: 0.2, metalness: 0.9,
+          emissive: 0xffe080, emissiveIntensity: 0.55,
+        })
+      : new THREE.MeshStandardMaterial({ color: 0xc8a86b, roughness: 0.6, metalness: 0.2 });
     const body = new THREE.Mesh(bodyGeo, material);
     group.add(body);
 
-    // children[1] — inner glow ring (spins)
-    const ringGeo = new THREE.TorusGeometry(0.13, 0.008, 8, 32);
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0.7 });
-    const ring = new THREE.Mesh(ringGeo, ringMat);
-    ring.rotation.x = Math.PI / 2;
-    group.add(ring);
-
-    // children[2] — outer pulse ring
-    const outerGeo = new THREE.TorusGeometry(0.18, 0.004, 8, 32);
-    const outerMat = new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0.3 });
-    const outer = new THREE.Mesh(outerGeo, outerMat);
-    outer.rotation.x = Math.PI / 2;
-    group.add(outer);
-
-    // children[3] — downward cone locator, bobs up/down
-    const coneGeo = new THREE.ConeGeometry(0.03, 0.09, 6);
-    const coneMat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
-    const cone = new THREE.Mesh(coneGeo, coneMat);
-    cone.rotation.z = Math.PI;
-    cone.position.y = 0.24;
-    group.add(cone);
-
-    // children[4] — invisible large hit sphere for tap detection
+    // children[1] — invisible large hit sphere for tap detection
     const hitGeo = new THREE.SphereGeometry(0.28, 6, 6);
     const hitMat = new THREE.MeshBasicMaterial({ visible: false });
     const hitSphere = new THREE.Mesh(hitGeo, hitMat);
@@ -225,14 +205,8 @@ export class ArService {
     // camera position, or fossils drift as the player walks.
     const y = this.groundY ?? 0;
     group.position.set(position.x, y, position.z);
-    group.visible = this.markersVisible();
     this.scene.add(group);
     this.fossilMeshes.set(id, group as unknown as THREE.Mesh);
-  }
-
-  setMarkersVisible(visible: boolean): void {
-    this.markersVisible.set(visible);
-    this.fossilMeshes.forEach(mesh => { mesh.visible = visible; });
   }
 
   xrDistanceTo(fossilId: string): number {
@@ -344,8 +318,6 @@ export class ArService {
   }
 
   private tick(frame: XRFrame | null): void {
-    const t = performance.now() / 1000;
-
     // Three.js copies cameraXR.matrixWorld onto the user camera but never
     // writes back to camera.position — it stays (0, 0, 0) forever. Extract
     // world position ourselves so cameraPosition/precisePosition can track
@@ -415,15 +387,6 @@ export class ArService {
       const dz = g.position.z - this.camera.position.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
       g.scale.setScalar(Math.max(1, dist / 5));
-      if (mesh.children[1]) mesh.children[1].rotation.z += 0.015;
-      if (mesh.children[2]) {
-        mesh.children[2].rotation.z -= 0.008;
-        const mat = (mesh.children[2] as THREE.Mesh).material as THREE.MeshBasicMaterial;
-        mat.opacity = 0.15 + Math.abs(Math.sin(t * 1.5)) * 0.25;
-      }
-      if (mesh.children[3]) {
-        mesh.children[3].position.y = 0.24 + Math.sin(t * 2.5) * 0.03;
-      }
     });
 
     // Keep the grid overlay flush with the live ground (lifted slightly to avoid z-fighting).

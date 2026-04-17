@@ -97,7 +97,9 @@ export interface FossilDirection {
 
     .top-bar {
       display: flex; justify-content: space-between; align-items: center;
-      padding: 12px 16px; background: linear-gradient(180deg, rgba(0,0,0,0.7) 0%, transparent 100%);
+      /* Extra top padding clears punch-hole/selfie cameras; safe-area handles notches. */
+      padding: calc(env(safe-area-inset-top, 0px) + 44px) 16px 12px;
+      background: linear-gradient(180deg, rgba(0,0,0,0.7) 0%, transparent 100%);
       pointer-events: all;
     }
     .score-badge, .gps-badge, .level-badge {
@@ -114,6 +116,23 @@ export interface FossilDirection {
     .level-expert      .level-value { color: #a855f7; }
     .level-master      .level-value { color: #ffd700; }
     .level-scholar      .level-value { color: #f43f5e; text-shadow: 0 0 6px rgba(244,63,94,0.6); }
+    /* Easter-egg levels (chroma / shiny chroma ownership) */
+    .level-chromaturge .level-value {
+      background: linear-gradient(90deg, #ff0040, #ffe000, #00e060, #00c0ff, #ff00d0);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      animation: chromaturgeHue 4s linear infinite;
+      font-weight: 800;
+    }
+    @keyframes chromaturgeHue { to { filter: hue-rotate(360deg); } }
+    .level-starborn .level-value {
+      background: linear-gradient(90deg, #ffe080, #ffffff, #ffd700, #ffffff, #ffe080);
+      background-size: 200% 100%;
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      animation: starbornShine 2.6s linear infinite;
+      text-shadow: 0 0 8px rgba(255,224,128,0.55);
+      font-weight: 800;
+    }
+    @keyframes starbornShine { to { background-position: 200% 0; } }
     .gps-ok    { color: #4ade80; }
     .gps-error { color: #f87171; }
 
@@ -207,6 +226,10 @@ export class HudComponent {
   @Input() showARPrompt = false;
   @Input() arActive = false;
   @Input() fossilDirections: FossilDirection[] = [];
+  /** Easter-egg gates: any chroma in the collection unlocks Chromaturge;
+   *  a shiny chroma unlocks Star-Touched (takes precedence). */
+  @Input() hasChroma = false;
+  @Input() hasShinyChroma = false;
 
   @Output() startAR     = new EventEmitter<void>();
   @Output() openMap     = new EventEmitter<void>();
@@ -226,6 +249,9 @@ export class HudComponent {
   get levelName(): string { return this.levelEntry[1]; }
   get levelKey(): string  { return this.levelEntry[2]; }
   private get levelEntry(): [number, string, string] {
+    // Shiny chroma outranks plain chroma, which outranks every score-based level.
+    if (this.hasShinyChroma) return [0, '✨ Star-Touched ✨', 'starborn'];
+    if (this.hasChroma)      return [0, '⟡ Chromaturge ⟡', 'chromaturge'];
     return HudComponent.LEVELS.find(([min]) => this.score >= min) ?? HudComponent.LEVELS.at(-1)!;
   }
 
