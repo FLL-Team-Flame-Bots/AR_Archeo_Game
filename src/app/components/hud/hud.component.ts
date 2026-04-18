@@ -82,7 +82,7 @@ export interface FossilDirection {
       </ng-container>
 
       <!-- Version stamp -->
-      <div class="version-stamp">v4.0.0</div>
+      <div class="version-stamp">v4.0.1</div>
 
       <!-- Bottom bar -->
       <div class="bottom-bar">
@@ -98,8 +98,9 @@ export interface FossilDirection {
 
     .top-bar {
       display: flex; justify-content: space-between; align-items: center;
-      /* Extra top padding clears punch-hole/selfie cameras; safe-area handles notches. */
-      padding: calc(env(safe-area-inset-top, 0px) + 44px) 16px 12px;
+      /* Safe-area handles iOS notches + most Android cutouts; small extra
+         margin just ensures the badges don't touch a centred punch-hole. */
+      padding: calc(env(safe-area-inset-top, 0px) + 16px) 16px 12px;
       background: linear-gradient(180deg, rgba(0,0,0,0.7) 0%, transparent 100%);
       pointer-events: all;
     }

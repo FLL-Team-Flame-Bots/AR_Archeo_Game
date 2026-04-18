@@ -2,6 +2,32 @@ import { Injectable, NgZone, signal } from '@angular/core';
 import * as THREE from 'three';
 import { DEVICE_HEIGHT_M } from './orientation.service';
 
+/** Per-fossil ground-height state. Attached to each fossil group's userData.
+ *  Converges to the closest observation of the player's groundY and locks
+ *  after two distinct approaches inside 1.5 m, so distant fossils on flat
+ *  terrain don't jump around when the player walks up a hill. */
+interface FossilHeightState {
+  /** Last accepted ground height for this fossil. Null until first obs. */
+  recordedY: number | null;
+  /** Closest player-to-fossil distance at which recordedY was updated. */
+  closestSeenDistance: number;
+  /** Count of transitions from outside 1.5 m to inside. Locks at 2. */
+  closeApproaches: number;
+  /** Hysteresis flag: true while inside 1.5 m, cleared when past 1.7 m. */
+  nearZone: boolean;
+  /** Once true, recordedY is never updated again. */
+  locked: boolean;
+}
+
+/** Inside this distance the fossil's Y can be refined by the player's Y. */
+const REFINE_RADIUS_M = 5;
+/** Entering this distance counts as a close-approach observation. */
+const CLOSE_APPROACH_IN_M = 1.5;
+/** Must leave past this distance before another close-approach can count. */
+const CLOSE_APPROACH_OUT_M = 1.7;
+/** Number of close approaches that lock the fossil's Y forever. */
+const CLOSE_APPROACHES_TO_LOCK = 2;
+
 @Injectable({ providedIn: 'root' })
 export class ArService {
   private renderer!: THREE.WebGLRenderer;
@@ -205,6 +231,14 @@ export class ArService {
     // camera position, or fossils drift as the player walks.
     const y = this.groundY ?? 0;
     group.position.set(position.x, y, position.z);
+    const heightState: FossilHeightState = {
+      recordedY: null,
+      closestSeenDistance: Infinity,
+      closeApproaches: 0,
+      nearZone: false,
+      locked: false,
+    };
+    group.userData = heightState;
     this.scene.add(group);
     this.fossilMeshes.set(id, group as unknown as THREE.Mesh);
   }
@@ -380,12 +414,35 @@ export class ArService {
 
     this.fossilMeshes.forEach((mesh) => {
       const g = mesh as unknown as THREE.Group;
-      g.position.y = currentGround;
-      // Scale with distance so a 0.08 m sphere stays readable past 5 m.
-      // At the 5 m collection radius it's normal-sized; at 30 m it's ~6×.
       const dx = g.position.x - this.camera.position.x;
       const dz = g.position.z - this.camera.position.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
+
+      // Per-fossil ground-Y refinement. The fossil's recorded Y is updated
+      // only from progressively closer observations, and is frozen after two
+      // distinct close approaches. Fossils with no observation yet fall back
+      // to the live global groundY (old behaviour).
+      const state = g.userData as FossilHeightState;
+      if (!state.locked) {
+        if (dist <= REFINE_RADIUS_M && dist < state.closestSeenDistance) {
+          state.recordedY = currentGround;
+          state.closestSeenDistance = dist;
+        }
+        // Close-approach counter with 1.5 m enter / 1.7 m exit hysteresis.
+        if (!state.nearZone && dist <= CLOSE_APPROACH_IN_M) {
+          state.nearZone = true;
+          state.closeApproaches++;
+          if (state.closeApproaches >= CLOSE_APPROACHES_TO_LOCK) {
+            state.locked = true;
+          }
+        } else if (state.nearZone && dist > CLOSE_APPROACH_OUT_M) {
+          state.nearZone = false;
+        }
+      }
+      g.position.y = state.recordedY ?? currentGround;
+
+      // Scale with distance so a 0.08 m sphere stays readable past 5 m.
+      // At the 5 m collection radius it's normal-sized; at 30 m it's ~6×.
       g.scale.setScalar(Math.max(1, dist / 5));
     });
 
