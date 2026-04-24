@@ -271,7 +271,10 @@ export class ArService {
       if (this.canvasRef) this.canvasRef.style.zIndex = '1';
       this.renderer.setClearColor(0x000000, 0);
 
-      this.camera.position.set(0, 0, 0);
+      // Eye at human height; ground at y=0. Matches WebXR's local ref space,
+      // so fossils (y=0) and grid (y=0.02) sit naturally below the horizon
+      // when the user holds the iPad upright (pitch≈0).
+      this.camera.position.set(0, DEVICE_HEIGHT_M, 0);
       this.camera.rotation.set(0, 0, 0);
       this.active.set(true);
 
@@ -362,9 +365,9 @@ export class ArService {
     // Position is an origin-relative world-space offset (anchored to the GPS
     // origin captured at AR session start). Place directly — do NOT add the
     // camera position, or fossils drift as the player walks.
-    // WebXR: live hit-test decides ground Y. Fallback: no hit-test, use the
-    // Y the caller passed in (component uses -DEVICE_HEIGHT_M).
-    const y = this.iosFallback() ? position.y : (this.groundY ?? 0);
+    // Both modes: ground is y=0. WebXR refines with live hit-test; fallback
+    // stays at 0 because there is no hit-test.
+    const y = this.groundY ?? 0;
     group.position.set(position.x, y, position.z);
     const heightState: FossilHeightState = {
       recordedY: null,
