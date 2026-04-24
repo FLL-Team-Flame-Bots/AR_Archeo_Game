@@ -83,7 +83,7 @@ const SHINY_CHANCE = 0.01;
           </p>
           <p class="hint error" *ngIf="arService.error()">{{ arService.error() }}</p>
 
-          <div class="splash-version">v4.0.5-ios</div>
+          <div class="splash-version">v4.0.6-ios</div>
         </div>
       </div>
 
@@ -108,6 +108,7 @@ const SHINY_CHANCE = 0.01;
           [gpsActive]="!!gps.playerPosition()"
           [showARPrompt]="!arService.active() && arService.supported()"
           [arActive]="arService.active()"
+          [playerName]="account.displayName()"
           [fossilDirections]="fossilDirections()"
           [hasChroma]="hasChroma()"
           [hasShinyChroma]="hasShinyChroma()"

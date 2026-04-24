@@ -16,6 +16,10 @@ export interface FossilDirection {
     <div class="hud">
       <!-- Top bar -->
       <div class="top-bar">
+        <div class="name-badge" *ngIf="playerName">
+          <span class="name-label">Player</span>
+          <span class="name-value">{{ playerName }}</span>
+        </div>
         <div class="score-badge">
           <span class="score-label">Score</span>
           <span class="score-value">{{ score }}</span>
@@ -82,7 +86,7 @@ export interface FossilDirection {
       </ng-container>
 
       <!-- Version stamp -->
-      <div class="version-stamp">v4.0.5-ios</div>
+      <div class="version-stamp">v4.0.6-ios</div>
 
       <!-- Bottom bar -->
       <div class="bottom-bar">
@@ -104,13 +108,18 @@ export interface FossilDirection {
       background: linear-gradient(180deg, rgba(0,0,0,0.7) 0%, transparent 100%);
       pointer-events: all;
     }
-    .score-badge, .gps-badge, .level-badge {
+    .score-badge, .gps-badge, .level-badge, .name-badge {
       background: rgba(0,0,0,0.5); border-radius: 20px; padding: 4px 10px;
       font-size: 12px; color: #f5e6c8; font-weight: 600;
     }
-    .score-label, .level-label { display: block; font-size: 9px; text-transform: uppercase; color: #c8a86b; }
+    .score-label, .level-label, .name-label { display: block; font-size: 9px; text-transform: uppercase; color: #c8a86b; }
     .score-value { display: block; font-size: 16px; font-weight: 700; }
     .level-value { display: block; font-size: 13px; font-weight: 700; }
+    .name-badge  { max-width: 110px; }
+    .name-value  {
+      display: block; font-size: 13px; font-weight: 700; color: #ffd700;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
     .level-novice      .level-value { color: #9ca3af; }
     .level-apprentice  .level-value { color: #a3e635; }
     .level-explorer    .level-value { color: #4ade80; }
@@ -227,6 +236,7 @@ export class HudComponent {
   @Input() gpsActive = false;
   @Input() showARPrompt = false;
   @Input() arActive = false;
+  @Input() playerName = '';
   @Input() fossilDirections: FossilDirection[] = [];
   /** Easter-egg gates: any chroma in the collection unlocks Chromaturge;
    *  a shiny chroma unlocks Star-Touched (takes precedence). */
