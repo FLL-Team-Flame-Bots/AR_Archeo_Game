@@ -1,5 +1,17 @@
 {
   "projects": {
     "default": "austin-test-450819"
+  },
+  "targets": {
+    "austin-test-450819": {
+      "hosting": {
+        "android": [
+          "austin-test-450819"
+        ],
+        "ios": [
+          "austin-test-450819-ios"
+        ]
+      }
+    }
   }
 }
