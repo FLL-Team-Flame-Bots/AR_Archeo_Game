@@ -402,6 +402,22 @@ export class ArService {
     this.tapHandler = fn;
   }
 
+  /** Raycast at the given screen coords and fire tapHandler if a fossil is hit.
+   *  Used when pointer events are captured by a DOM overlay above the canvas
+   *  (iOS fallback) so we can't rely on the canvas's own touchend listener. */
+  handleTap(clientX: number, clientY: number): void {
+    if (!this.canvasRef || !this.camera) return;
+    if (this.xrSession) return;  // WebXR 'select' handles taps during immersive-ar.
+    const rect = this.canvasRef.getBoundingClientRect();
+    const ndc = new THREE.Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(ndc, this.camera);
+    this.checkFossilHit(raycaster.ray.origin, raycaster.ray.direction);
+  }
+
   private gridMesh: THREE.LineSegments | null = null;
 
   /** Draws a wireframe overlay of grid cells on the ground.

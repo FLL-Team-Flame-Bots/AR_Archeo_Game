@@ -83,7 +83,7 @@ const SHINY_CHANCE = 0.01;
           </p>
           <p class="hint error" *ngIf="arService.error()">{{ arService.error() }}</p>
 
-          <div class="splash-version">v4.0.8-ios</div>
+          <div class="splash-version">v4.0.9-ios</div>
         </div>
       </div>
 
@@ -98,8 +98,11 @@ const SHINY_CHANCE = 0.01;
         (submitted)="onDisplayNameSubmitted($event)"
       />
 
-      <!-- dom-overlay root: transparent, no background -->
-      <div #arOverlay class="ar-overlay">
+      <!-- dom-overlay root: transparent, no background.
+           pointer-events: auto (not none) so deeply-nested HUD buttons are
+           reliably hit-testable on iOS Safari. Empty-area taps are routed
+           to the canvas raycaster via (click)="onOverlayTap($event)". -->
+      <div #arOverlay class="ar-overlay" (click)="onOverlayTap($event)">
         <app-hud
           [collected]="collectedIds.size"
           [total]="(fossilTemplates).length"
@@ -241,7 +244,7 @@ const SHINY_CHANCE = 0.01;
   styles: [`
     .ar-container { position: fixed; inset: 0; background: #1a0f00; }
     .ar-canvas    { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
-    .ar-overlay   { position: fixed; inset: 0; pointer-events: none; }
+    .ar-overlay   { position: fixed; inset: 0; pointer-events: auto; }
 
     .no-ar-bg {
       position: fixed; inset: 0; z-index: 10;
@@ -649,6 +652,16 @@ export class ArViewComponent implements OnInit, OnDestroy {
 
   onDisplayNameSubmitted(name: string): void {
     void this.account.setDisplayName(name);
+  }
+
+  /** Click on the AR overlay. Only raycast for fossils when the click was on
+   *  the overlay itself (empty AR space) — clicks on HUD buttons or modal
+   *  panels inside already handle themselves, and bubble up here with a
+   *  different event.target. */
+  onOverlayTap(event: MouseEvent): void {
+    if (event.target !== event.currentTarget) return;
+    if (!this.arService.active()) return;
+    this.arService.handleTap(event.clientX, event.clientY);
   }
 
   // ── Local persistence ────────────────────────────────────────────────────
