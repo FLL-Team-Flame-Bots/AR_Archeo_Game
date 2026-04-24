@@ -8,3 +8,8 @@ html, body {
   -webkit-tap-highlight-color: transparent;
   user-select: none;
 }
+
+input, textarea, [contenteditable="true"] {
+  user-select: text;
+  -webkit-user-select: text;
+}
