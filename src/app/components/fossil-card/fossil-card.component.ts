@@ -119,6 +119,7 @@ import { FossilLocation } from '../../data/fossil.model';
       height: 100%;
       cursor: crosshair;
       touch-action: none;
+      pointer-events: auto;
     }
 
     .brush-progress-wrap {

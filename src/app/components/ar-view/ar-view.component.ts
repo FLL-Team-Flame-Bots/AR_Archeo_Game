@@ -83,7 +83,7 @@ const SHINY_CHANCE = 0.01;
           </p>
           <p class="hint error" *ngIf="arService.error()">{{ arService.error() }}</p>
 
-          <div class="splash-version">v4.0.6-ios</div>
+          <div class="splash-version">v4.0.7-ios</div>
         </div>
       </div>
 
@@ -119,56 +119,11 @@ const SHINY_CHANCE = 0.01;
           (openLearn)="showLearn = true"
         />
 
-        <!-- Leaderboard modal -->
-        <app-leaderboard
-          *ngIf="showLeaderboard()"
-          (close)="showLeaderboard.set(false)"
-        />
-
-        <!-- Fossil card popup -->
-        <div class="overlay-backdrop" *ngIf="selectedFossil()" (click)="selectedFossil.set(null)">
-          <div class="overlay-center" (click)="$event.stopPropagation()">
-            <app-fossil-card
-              [fossil]="selectedFossil()!"
-              (close)="selectedFossil.set(null)"
-              (collect)="onCollect($event)"
-            />
-          </div>
-        </div>
-
         <!-- GPS error toast -->
         <div class="gps-error-toast" *ngIf="gps.error()">{{ gps.error() }}</div>
 
         <!-- "Too far to collect" toast -->
         <div class="too-far-toast" *ngIf="tooFarToast()">{{ tooFarToast() }}</div>
-
-        <!-- Collection screen -->
-        <div class="overlay-backdrop" *ngIf="showCollection()" (click)="showCollection.set(false)">
-          <div class="collection-panel" (click)="$event.stopPropagation()">
-            <div class="collection-header">
-              <div>
-                <div class="collection-title">Your Collection</div>
-                <div class="collection-score">Score: <strong>{{ score() }}</strong></div>
-              </div>
-              <button class="close-btn" (click)="showCollection.set(false)">✕</button>
-            </div>
-            <div class="collection-body">
-              <p class="collection-empty" *ngIf="collectionGrouped.length === 0">
-                No fossils yet — go find some!
-              </p>
-              <div class="collection-item" *ngFor="let g of collectionGrouped"
-                   [class]="'rarity-' + g.rarity"
-                   [class.shiny]="g.shiny">
-                <span class="collection-emoji">{{ g.shiny ? '✨' : '' }}{{ g.emoji }}</span>
-                <div class="collection-meta">
-                  <div class="collection-name">{{ g.shiny ? 'Shiny ' : '' }}{{ g.name }}</div>
-                  <div class="collection-rarity">{{ g.rarity }}{{ g.shiny ? ' · shiny' : '' }} · {{ g.points }} pt</div>
-                </div>
-                <span class="collection-count" *ngIf="g.count > 1">×{{ g.count }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
 
         <!-- Celebration overlay (epic / legendary / chroma / any shiny) -->
         <div class="celebration" *ngIf="celebrating() as f"
@@ -184,34 +139,84 @@ const SHINY_CHANCE = 0.01;
             <div class="celebration-points">+{{ pointsFor(f) }} points</div>
           </div>
         </div>
+      </div>
 
-        <!-- Floor-detection debug readout (only while AR is active) -->
-        <div class="floor-debug" *ngIf="arService.active()">
-          <div class="floor-debug-row">
-            <span class="floor-debug-label">Floor:</span>
-            <span class="floor-debug-value"
-                  [class.ok]="arService.groundYSignal() !== null"
-                  [class.waiting]="arService.groundYSignal() === null">
-              {{ arService.groundYSignal() === null
-                  ? 'searching…'
-                  : 'y=' + arService.groundYSignal()!.toFixed(2) + 'm' }}
-            </span>
-          </div>
-          <div class="floor-debug-row">
-            <span class="floor-debug-label">hits:</span>
-            <span class="floor-debug-value">{{ arService.hitCount() }}</span>
-            <span class="floor-debug-label">rej:</span>
-            <span class="floor-debug-value">{{ arService.rejectedCount() }}</span>
-          </div>
-          <div class="floor-debug-row" *ngIf="arService.lastReject()">
-            <span class="floor-debug-label">last:</span>
-            <span class="floor-debug-value">{{ arService.lastReject() }}</span>
-          </div>
-          <button class="grid-toggle" (click)="toggleGrid()"
-                  [class.on]="showGrid()">
-            Grid: {{ showGrid() ? 'ON' : 'OFF' }}
-          </button>
+      <!-- Interactive modals are siblings of .ar-overlay, NOT children, because
+           iOS Safari unreliably routes pointer/input events through a
+           pointer-events: none ancestor. Keeping them at the .ar-container
+           level gives them a clean event path. -->
+
+      <!-- Leaderboard modal -->
+      <app-leaderboard
+        *ngIf="showLeaderboard()"
+        (close)="showLeaderboard.set(false)"
+      />
+
+      <!-- Fossil card popup -->
+      <div class="overlay-backdrop" *ngIf="selectedFossil()" (click)="selectedFossil.set(null)">
+        <div class="overlay-center" (click)="$event.stopPropagation()">
+          <app-fossil-card
+            [fossil]="selectedFossil()!"
+            (close)="selectedFossil.set(null)"
+            (collect)="onCollect($event)"
+          />
         </div>
+      </div>
+
+      <!-- Collection screen -->
+      <div class="overlay-backdrop" *ngIf="showCollection()" (click)="showCollection.set(false)">
+        <div class="collection-panel" (click)="$event.stopPropagation()">
+          <div class="collection-header">
+            <div>
+              <div class="collection-title">Your Collection</div>
+              <div class="collection-score">Score: <strong>{{ score() }}</strong></div>
+            </div>
+            <button class="close-btn" (click)="showCollection.set(false)">✕</button>
+          </div>
+          <div class="collection-body">
+            <p class="collection-empty" *ngIf="collectionGrouped.length === 0">
+              No fossils yet — go find some!
+            </p>
+            <div class="collection-item" *ngFor="let g of collectionGrouped"
+                 [class]="'rarity-' + g.rarity"
+                 [class.shiny]="g.shiny">
+              <span class="collection-emoji">{{ g.shiny ? '✨' : '' }}{{ g.emoji }}</span>
+              <div class="collection-meta">
+                <div class="collection-name">{{ g.shiny ? 'Shiny ' : '' }}{{ g.name }}</div>
+                <div class="collection-rarity">{{ g.rarity }}{{ g.shiny ? ' · shiny' : '' }} · {{ g.points }} pt</div>
+              </div>
+              <span class="collection-count" *ngIf="g.count > 1">×{{ g.count }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Floor-detection debug readout (only while AR is active) -->
+      <div class="floor-debug" *ngIf="arService.active()">
+        <div class="floor-debug-row">
+          <span class="floor-debug-label">Floor:</span>
+          <span class="floor-debug-value"
+                [class.ok]="arService.groundYSignal() !== null"
+                [class.waiting]="arService.groundYSignal() === null">
+            {{ arService.groundYSignal() === null
+                ? 'searching…'
+                : 'y=' + arService.groundYSignal()!.toFixed(2) + 'm' }}
+          </span>
+        </div>
+        <div class="floor-debug-row">
+          <span class="floor-debug-label">hits:</span>
+          <span class="floor-debug-value">{{ arService.hitCount() }}</span>
+          <span class="floor-debug-label">rej:</span>
+          <span class="floor-debug-value">{{ arService.rejectedCount() }}</span>
+        </div>
+        <div class="floor-debug-row" *ngIf="arService.lastReject()">
+          <span class="floor-debug-label">last:</span>
+          <span class="floor-debug-value">{{ arService.lastReject() }}</span>
+        </div>
+        <button class="grid-toggle" (click)="toggleGrid()"
+                [class.on]="showGrid()">
+          Grid: {{ showGrid() ? 'ON' : 'OFF' }}
+        </button>
       </div>
     </div>
   `,
