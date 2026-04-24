@@ -82,6 +82,8 @@ const SHINY_CHANCE = 0.01;
             iOS mode: stand still and rotate your device to look around. Tap any fossil you see.
           </p>
           <p class="hint error" *ngIf="arService.error()">{{ arService.error() }}</p>
+
+          <div class="splash-version">v4.0.2-ios</div>
         </div>
       </div>
 
@@ -242,6 +244,10 @@ const SHINY_CHANCE = 0.01;
     .start-ar-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
     .hint { font-size: 12px; color: #facc15; margin-top: 8px; padding: 0 20px; }
     .hint.error { color: #f87171; background: rgba(200,0,0,0.2); border-radius: 8px; padding: 8px 16px; }
+    .splash-version {
+      margin-top: 20px; font-size: 11px; font-family: monospace;
+      color: rgba(200,168,107,0.6); letter-spacing: 0.5px;
+    }
 
     .overlay-backdrop {
       position: fixed; inset: 0; background: rgba(0,0,0,0.6);
