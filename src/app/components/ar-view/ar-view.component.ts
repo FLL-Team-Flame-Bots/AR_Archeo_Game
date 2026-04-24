@@ -83,7 +83,7 @@ const SHINY_CHANCE = 0.01;
           </p>
           <p class="hint error" *ngIf="arService.error()">{{ arService.error() }}</p>
 
-          <div class="splash-version">v4.0.7-ios</div>
+          <div class="splash-version">v4.0.8-ios</div>
         </div>
       </div>
 
@@ -191,8 +191,26 @@ const SHINY_CHANCE = 0.01;
         </div>
       </div>
 
-      <!-- Floor-detection debug readout (only while AR is active) -->
-      <div class="floor-debug" *ngIf="arService.active()">
+      <!-- iOS-mode orientation debug -->
+      <div class="floor-debug" *ngIf="arService.active() && arService.iosFallback() && arService.iosDebug() as d">
+        <div class="floor-debug-row">
+          <span class="floor-debug-label">heading:</span>
+          <span class="floor-debug-value">{{ d.heading.toFixed(1) }}</span>
+        </div>
+        <div class="floor-debug-row">
+          <span class="floor-debug-label">ref:</span>
+          <span class="floor-debug-value">{{ d.ref.toFixed(1) }}</span>
+          <span class="floor-debug-label">yaw:</span>
+          <span class="floor-debug-value">{{ (d.yaw * 57.2958).toFixed(1) }}°</span>
+        </div>
+        <div class="floor-debug-row">
+          <span class="floor-debug-label">pitch:</span>
+          <span class="floor-debug-value">{{ d.pitch.toFixed(1) }}</span>
+        </div>
+      </div>
+
+      <!-- Floor-detection debug readout (WebXR mode only) -->
+      <div class="floor-debug" *ngIf="arService.active() && !arService.iosFallback()">
         <div class="floor-debug-row">
           <span class="floor-debug-label">Floor:</span>
           <span class="floor-debug-value"

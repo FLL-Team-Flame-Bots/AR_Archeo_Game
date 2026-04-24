@@ -60,6 +60,10 @@ export class ArService {
   /** Camera position in XR world space, updated every frame. */
   cameraPosition = signal<{ x: number; z: number }>({ x: 0, z: 0 });
 
+  /** iOS-mode debug readout: current camera rotation + orientation input,
+   *  so we can see whether the rotation pipeline is wired up. */
+  iosDebug = signal<{ heading: number; pitch: number; ref: number; yaw: number; camPitch: number } | null>(null);
+
   /** Debug readouts for the on-screen floor-detection panel. */
   groundYSignal = signal<number | null>(null);
   hitCount      = signal(0);
@@ -325,6 +329,13 @@ export class ArService {
       const pitch = (o.pitch * Math.PI) / 180;
       this.camera.rotation.order = 'YXZ';
       this.camera.rotation.set(pitch, yaw, 0);
+      this.ngZone.run(() => this.iosDebug.set({
+        heading: o.heading, pitch: o.pitch, ref, yaw, camPitch: pitch,
+      }));
+    } else {
+      this.ngZone.run(() => this.iosDebug.set({
+        heading: -1, pitch: -1, ref: -1, yaw: -1, camPitch: -1,
+      }));
     }
 
     // Fallback has no hit-test — fossils stay at the Y set in placeFossil.
