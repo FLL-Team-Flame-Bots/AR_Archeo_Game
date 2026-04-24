@@ -62,7 +62,10 @@ export class ArService {
 
   /** iOS-mode debug readout: current camera rotation + orientation input,
    *  so we can see whether the rotation pipeline is wired up. */
-  iosDebug = signal<{ heading: number; pitch: number; ref: number; yaw: number; camPitch: number } | null>(null);
+  iosDebug = signal<{
+    heading: number; pitch: number; ref: number; yaw: number; camPitch: number;
+    fossilCount: number; camX: number; camY: number; camZ: number;
+  } | null>(null);
 
   /** Debug readouts for the on-screen floor-detection panel. */
   groundYSignal = signal<number | null>(null);
@@ -280,6 +283,19 @@ export class ArService {
       // when the user holds the iPad upright (pitch≈0).
       this.camera.position.set(0, DEVICE_HEIGHT_M, 0);
       this.camera.rotation.set(0, 0, 0);
+
+      // Debug test marker — bright red sphere 3m in front of camera at
+      // ground level. If the user can see this but not the GPS-based
+      // fossils, the issue is fossil placement direction, not rendering.
+      const testGeo = new THREE.SphereGeometry(0.4, 16, 16);
+      const testMat = new THREE.MeshStandardMaterial({
+        color: 0xff2040, emissive: 0xff2040, emissiveIntensity: 0.6,
+      });
+      const testMesh = new THREE.Mesh(testGeo, testMat);
+      testMesh.position.set(0, 0.4, -3);
+      testMesh.userData['testMarker'] = true;
+      this.scene.add(testMesh);
+
       this.active.set(true);
 
       this.ngZone.runOutsideAngular(() => {
@@ -312,29 +328,49 @@ export class ArService {
       this.videoEl.srcObject = null;
       this.videoEl.style.display = 'none';
     }
+    // Remove the debug test marker if present
+    const marker = this.scene?.children.find(o => (o as THREE.Mesh).userData?.['testMarker']);
+    if (marker) {
+      this.scene.remove(marker);
+      const m = marker as THREE.Mesh;
+      if (m.geometry) m.geometry.dispose();
+      const mat = m.material as THREE.Material | THREE.Material[];
+      if (Array.isArray(mat)) mat.forEach(x => x.dispose());
+      else if (mat) mat.dispose();
+    }
     this.active.set(false);
     this.camera.rotation.set(0, 0, 0);
   }
 
   private tickFallback(): void {
     const o = this.orientation.orientation();
+    let yaw = 0, ref = 0, deviceHeading = -1, devicePitch = -1;
     if (o) {
-      // Yaw = rotation from the locked-in heading reference. Normalise the
-      // delta to [-180, 180] so crossing north (359 → 1) takes the short way.
-      const ref = this.orientation.headingReference() ?? o.heading;
+      ref = this.orientation.headingReference() ?? o.heading;
       let delta = o.heading - ref;
       if (delta > 180) delta -= 360;
       if (delta < -180) delta += 360;
-      const yaw = -(delta * Math.PI) / 180;
-      const pitch = (o.pitch * Math.PI) / 180;
-      this.camera.rotation.order = 'YXZ';
-      this.camera.rotation.set(pitch, yaw, 0);
+      yaw = -(delta * Math.PI) / 180;
+      deviceHeading = o.heading;
+      devicePitch = o.pitch;
+    }
+    // Force pitch=0 — camera always horizontal. Device tilt no longer points
+    // the camera away from the fossils. User looks around by rotating the
+    // device about its vertical axis (yaw).
+    this.camera.rotation.order = 'YXZ';
+    this.camera.rotation.set(0, yaw, 0);
+
+    // Push debug values at most 4×/sec to avoid signal-update thrash.
+    const now = performance.now();
+    if (now - this.debugLastFlush > 250) {
+      this.debugLastFlush = now;
+      const cx = this.camera.position.x;
+      const cy = this.camera.position.y;
+      const cz = this.camera.position.z;
+      const fc = this.fossilMeshes.size;
       this.ngZone.run(() => this.iosDebug.set({
-        heading: o.heading, pitch: o.pitch, ref, yaw, camPitch: pitch,
-      }));
-    } else {
-      this.ngZone.run(() => this.iosDebug.set({
-        heading: -1, pitch: -1, ref: -1, yaw: -1, camPitch: -1,
+        heading: deviceHeading, pitch: devicePitch, ref, yaw, camPitch: 0,
+        fossilCount: fc, camX: cx, camY: cy, camZ: cz,
       }));
     }
 

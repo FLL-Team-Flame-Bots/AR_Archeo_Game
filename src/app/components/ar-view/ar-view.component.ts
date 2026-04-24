@@ -83,7 +83,7 @@ const SHINY_CHANCE = 0.01;
           </p>
           <p class="hint error" *ngIf="arService.error()">{{ arService.error() }}</p>
 
-          <div class="splash-version">v4.0.9-ios</div>
+          <div class="splash-version">v4.0.10-ios</div>
         </div>
       </div>
 
@@ -194,21 +194,27 @@ const SHINY_CHANCE = 0.01;
         </div>
       </div>
 
-      <!-- iOS-mode orientation debug -->
+      <!-- iOS-mode debug readout -->
       <div class="floor-debug" *ngIf="arService.active() && arService.iosFallback() && arService.iosDebug() as d">
         <div class="floor-debug-row">
-          <span class="floor-debug-label">heading:</span>
+          <span class="floor-debug-label">hdg:</span>
           <span class="floor-debug-value">{{ d.heading.toFixed(1) }}</span>
-        </div>
-        <div class="floor-debug-row">
           <span class="floor-debug-label">ref:</span>
           <span class="floor-debug-value">{{ d.ref.toFixed(1) }}</span>
-          <span class="floor-debug-label">yaw:</span>
-          <span class="floor-debug-value">{{ (d.yaw * 57.2958).toFixed(1) }}°</span>
         </div>
         <div class="floor-debug-row">
-          <span class="floor-debug-label">pitch:</span>
-          <span class="floor-debug-value">{{ d.pitch.toFixed(1) }}</span>
+          <span class="floor-debug-label">yaw:</span>
+          <span class="floor-debug-value">{{ (d.yaw * 57.2958).toFixed(1) }}°</span>
+          <span class="floor-debug-label">tilt:</span>
+          <span class="floor-debug-value">{{ d.pitch.toFixed(0) }}°</span>
+        </div>
+        <div class="floor-debug-row">
+          <span class="floor-debug-label">fossils:</span>
+          <span class="floor-debug-value">{{ d.fossilCount }}</span>
+        </div>
+        <div class="floor-debug-row">
+          <span class="floor-debug-label">cam:</span>
+          <span class="floor-debug-value">{{ d.camX.toFixed(1) }},{{ d.camY.toFixed(1) }},{{ d.camZ.toFixed(1) }}</span>
         </div>
       </div>
 
