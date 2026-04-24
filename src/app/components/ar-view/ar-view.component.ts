@@ -83,12 +83,20 @@ const SHINY_CHANCE = 0.01;
           </p>
           <p class="hint error" *ngIf="arService.error()">{{ arService.error() }}</p>
 
-          <div class="splash-version">v4.0.2-ios</div>
+          <div class="splash-version">v4.0.3-ios</div>
         </div>
       </div>
 
       <!-- XR canvas — must stay OUTSIDE the dom-overlay root -->
       <canvas #arCanvas class="ar-canvas"></canvas>
+
+      <!-- First-launch name prompt — MUST stay outside .ar-overlay. Nesting
+           it inside a pointer-events: none parent breaks input focus on iOS
+           Safari even when the child sets pointer-events: all. -->
+      <app-display-name
+        *ngIf="needsDisplayName()"
+        (submitted)="onDisplayNameSubmitted($event)"
+      />
 
       <!-- dom-overlay root: transparent, no background -->
       <div #arOverlay class="ar-overlay">
@@ -108,12 +116,6 @@ const SHINY_CHANCE = 0.01;
           (openCollection)="showCollection.set(true)"
           (openLeaderboard)="showLeaderboard.set(true)"
           (openLearn)="showLearn = true"
-        />
-
-        <!-- First-launch name prompt -->
-        <app-display-name
-          *ngIf="needsDisplayName()"
-          (submitted)="onDisplayNameSubmitted($event)"
         />
 
         <!-- Leaderboard modal -->

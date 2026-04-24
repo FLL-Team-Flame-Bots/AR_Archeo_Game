@@ -17,11 +17,13 @@ import { FormsModule } from '@angular/forms';
         <input
           class="dn-input"
           type="text"
+          inputmode="text"
+          autocomplete="off"
+          autocapitalize="words"
           [(ngModel)]="name"
           maxlength="24"
           placeholder="Your name (max 24 chars)"
           (keydown.enter)="submit()"
-          autofocus
         />
         <div class="dn-count">{{ name.length }}/24</div>
         <button class="dn-btn" [disabled]="!canSubmit()" (click)="submit()">
@@ -50,7 +52,7 @@ import { FormsModule } from '@angular/forms';
       width: 100%; padding: 10px 12px;
       background: rgba(0,0,0,0.35);
       border: 1px solid rgba(139,105,20,0.6); border-radius: 8px;
-      color: #f5e6c8; font-size: 15px; text-align: center;
+      color: #f5e6c8; font-size: 16px; text-align: center;
       outline: none; box-sizing: border-box;
     }
     .dn-input:focus { border-color: #ffd700; }
