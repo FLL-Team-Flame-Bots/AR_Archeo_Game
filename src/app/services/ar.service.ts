@@ -1,6 +1,6 @@
 import { Injectable, NgZone, signal } from '@angular/core';
 import * as THREE from 'three';
-import { DEVICE_HEIGHT_M } from './orientation.service';
+import { DEVICE_HEIGHT_M, OrientationService } from './orientation.service';
 
 /** Per-fossil ground-height state. Attached to each fossil group's userData.
  *  Converges to the closest observation of the player's groundY and locks
@@ -48,6 +48,15 @@ export class ArService {
   loading = signal(false);
   error = signal<string | null>(null);
 
+  /** True when running via camera + DeviceOrientation fallback (iOS Safari).
+   *  False when using WebXR (Android Chrome). Public so the component can
+   *  skip the walk-closer distance gate (no walking possible in fallback). */
+  iosFallback = signal(false);
+
+  private canvasRef: HTMLCanvasElement | null = null;
+  private videoEl: HTMLVideoElement | null = null;
+  private videoStream: MediaStream | null = null;
+
   /** Camera position in XR world space, updated every frame. */
   cameraPosition = signal<{ x: number; z: number }>({ x: 0, z: 0 });
 
@@ -62,20 +71,34 @@ export class ArService {
   private debugLast = '';
   private debugLastFlush = 0;
 
-  constructor(private ngZone: NgZone) {}
+  constructor(private ngZone: NgZone, private orientation: OrientationService) {}
 
   async checkSupport(): Promise<boolean> {
-    if (!navigator.xr) {
-      this.error.set('WebXR not available in this browser');
-      return false;
+    // Prefer WebXR immersive-ar (Android Chrome with ARCore).
+    if (navigator.xr) {
+      try {
+        const xrOk = await navigator.xr.isSessionSupported('immersive-ar');
+        if (xrOk) {
+          this.iosFallback.set(false);
+          this.supported.set(true);
+          return true;
+        }
+      } catch { /* fall through to camera fallback */ }
     }
-    const supported = await navigator.xr.isSessionSupported('immersive-ar');
-    this.supported.set(supported);
-    if (!supported) this.error.set('AR not supported on this device');
-    return supported;
+    // iOS Safari path: camera passthrough via getUserMedia + DeviceOrientation.
+    const hasGum = !!navigator.mediaDevices?.getUserMedia;
+    const hasOrient = typeof DeviceOrientationEvent !== 'undefined';
+    if (hasGum && hasOrient) {
+      this.iosFallback.set(true);
+      this.supported.set(true);
+      return true;
+    }
+    this.error.set('AR requires a device with camera and orientation sensors');
+    return false;
   }
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
+    this.canvasRef = canvas;
     this.renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -108,6 +131,11 @@ export class ArService {
   }
 
   async startAR(overlayRoot?: Element): Promise<void> {
+    if (this.iosFallback()) {
+      await this.startARFallback();
+      return;
+    }
+
     if (!navigator.xr) {
       this.error.set('WebXR not available in this browser');
       return;
@@ -198,10 +226,115 @@ export class ArService {
   }
 
   async stopAR(): Promise<void> {
+    if (this.iosFallback()) {
+      this.stopFallback();
+      return;
+    }
     if (this.xrSession) {
       await this.xrSession.end();
     }
     if (this.renderer) this.renderer.setAnimationLoop(null);
+  }
+
+  /** iOS Safari path: camera feed as background, Three.js canvas transparent
+   *  on top, camera rotation driven by DeviceOrientationEvent. No SLAM, no
+   *  hit-test — player is stationary at origin and rotates to look around. */
+  private async startARFallback(): Promise<void> {
+    this.error.set(null);
+    this.loading.set(true);
+    try {
+      this.videoStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
+        audio: false,
+      });
+
+      if (!this.videoEl) {
+        const video = document.createElement('video');
+        video.playsInline = true;
+        video.muted = true;
+        video.autoplay = true;
+        video.setAttribute('playsinline', 'true');
+        video.setAttribute('webkit-playsinline', 'true');
+        Object.assign(video.style, {
+          position: 'fixed', inset: '0', width: '100%', height: '100%',
+          objectFit: 'cover', zIndex: '0',
+        });
+        // Insert video immediately before the canvas so canvas layers on top.
+        const parent = this.canvasRef?.parentElement ?? document.body;
+        parent.insertBefore(video, this.canvasRef ?? null);
+        this.videoEl = video;
+      }
+      this.videoEl.style.display = 'block';
+      this.videoEl.srcObject = this.videoStream;
+      await this.videoEl.play();
+
+      if (this.canvasRef) this.canvasRef.style.zIndex = '1';
+      this.renderer.setClearColor(0x000000, 0);
+
+      this.camera.position.set(0, 0, 0);
+      this.camera.rotation.set(0, 0, 0);
+      this.active.set(true);
+
+      this.ngZone.runOutsideAngular(() => {
+        const tick = () => {
+          if (!this.active() || !this.iosFallback()) return;
+          this.tickFallback();
+          this.animationId = requestAnimationFrame(tick);
+        };
+        this.animationId = requestAnimationFrame(tick);
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.error.set(`Camera/AR failed: ${msg}`);
+      this.stopFallback();
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  private stopFallback(): void {
+    if (this.animationId) {
+      cancelAnimationFrame(this.animationId);
+      this.animationId = 0;
+    }
+    if (this.videoStream) {
+      this.videoStream.getTracks().forEach(t => t.stop());
+      this.videoStream = null;
+    }
+    if (this.videoEl) {
+      this.videoEl.srcObject = null;
+      this.videoEl.style.display = 'none';
+    }
+    this.active.set(false);
+    this.camera.rotation.set(0, 0, 0);
+  }
+
+  private tickFallback(): void {
+    const o = this.orientation.orientation();
+    if (o) {
+      // Yaw = rotation from the locked-in heading reference. Normalise the
+      // delta to [-180, 180] so crossing north (359 → 1) takes the short way.
+      const ref = this.orientation.headingReference() ?? o.heading;
+      let delta = o.heading - ref;
+      if (delta > 180) delta -= 360;
+      if (delta < -180) delta += 360;
+      const yaw = -(delta * Math.PI) / 180;
+      const pitch = (o.pitch * Math.PI) / 180;
+      this.camera.rotation.order = 'YXZ';
+      this.camera.rotation.set(pitch, yaw, 0);
+    }
+
+    // Fallback has no hit-test — fossils stay at the Y set in placeFossil.
+    // Still scale by distance so distant ones stay readable.
+    this.fossilMeshes.forEach((mesh) => {
+      const g = mesh as unknown as THREE.Group;
+      const dx = g.position.x - this.camera.position.x;
+      const dz = g.position.z - this.camera.position.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      g.scale.setScalar(Math.max(1, dist / 5));
+    });
+
+    this.renderer.render(this.scene, this.camera);
   }
 
   placeFossil(id: string, position: THREE.Vector3, shiny = false): void {
@@ -229,7 +362,9 @@ export class ArService {
     // Position is an origin-relative world-space offset (anchored to the GPS
     // origin captured at AR session start). Place directly — do NOT add the
     // camera position, or fossils drift as the player walks.
-    const y = this.groundY ?? 0;
+    // WebXR: live hit-test decides ground Y. Fallback: no hit-test, use the
+    // Y the caller passed in (component uses -DEVICE_HEIGHT_M).
+    const y = this.iosFallback() ? position.y : (this.groundY ?? 0);
     group.position.set(position.x, y, position.z);
     const heightState: FossilHeightState = {
       recordedY: null,

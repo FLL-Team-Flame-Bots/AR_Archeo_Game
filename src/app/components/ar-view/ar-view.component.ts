@@ -76,7 +76,10 @@ const SHINY_CHANCE = 0.01;
           </button>
 
           <p class="hint" *ngIf="!arService.supported()">
-            ⚠️ AR not detected — needs Chrome on Android with ARCore
+            ⚠️ AR not detected — needs camera + orientation sensors (Chrome on Android, or Safari on iOS)
+          </p>
+          <p class="hint ios" *ngIf="arService.supported() && arService.iosFallback()">
+            iOS mode: stand still and rotate your device to look around. Tap any fossil you see.
           </p>
           <p class="hint error" *ngIf="arService.error()">{{ arService.error() }}</p>
         </div>
@@ -716,12 +719,16 @@ export class ArViewComponent implements OnInit, OnDestroy {
       const fossil = this.allFossils()
         .find(f => f.id === fossilId && !this.collectedIds.has(f.id) && !f.discovered);
       if (!fossil) return;
-      const distM = this.arService.xrDistanceTo(fossilId);
-      if (distM > COLLECT_RADIUS_M) {
-        this.tooFarToast.set(`Walk closer — ${Math.round(distM)} m away`);
-        clearTimeout(this.tooFarTimeout);
-        this.tooFarTimeout = window.setTimeout(() => this.tooFarToast.set(null), 1800);
-        return;
+      // In iOS fallback mode the player is stationary (no SLAM/walking), so
+      // the walk-closer gate would be unreachable. Tap-to-open is enough.
+      if (!this.arService.iosFallback()) {
+        const distM = this.arService.xrDistanceTo(fossilId);
+        if (distM > COLLECT_RADIUS_M) {
+          this.tooFarToast.set(`Walk closer — ${Math.round(distM)} m away`);
+          clearTimeout(this.tooFarTimeout);
+          this.tooFarTimeout = window.setTimeout(() => this.tooFarToast.set(null), 1800);
+          return;
+        }
       }
       this.selectedFossil.set(fossil);
     });
