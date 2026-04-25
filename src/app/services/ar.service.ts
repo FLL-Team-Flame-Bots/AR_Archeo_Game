@@ -19,6 +19,34 @@ interface FossilHeightState {
   locked: boolean;
 }
 
+/** Convert (alpha, beta, gamma) device orientation + screen angle (all
+ *  degrees) into a Three.js quaternion. Same algorithm Three.js's
+ *  DeviceOrientationControls uses — handles portrait/landscape correctly. */
+function quatFromDeviceOrientation(
+  alphaDeg: number, betaDeg: number, gammaDeg: number, screenAngleDeg: number,
+): THREE.Quaternion {
+  const alpha = (alphaDeg * Math.PI) / 180;
+  const beta  = (betaDeg  * Math.PI) / 180;
+  const gamma = (gammaDeg * Math.PI) / 180;
+  const orient = (screenAngleDeg * Math.PI) / 180;
+
+  // YXZ Euler from device frame
+  const euler = new THREE.Euler(beta, alpha, -gamma, 'YXZ');
+  const q = new THREE.Quaternion().setFromEuler(euler);
+
+  // Camera looks out the device's -Z (back side) — this is the standard
+  // "the device is held like a phone" rotation.
+  const Q1 = new THREE.Quaternion(-Math.SQRT1_2, 0, 0, Math.SQRT1_2);
+  q.multiply(Q1);
+
+  // Adjust for screen orientation (portrait/landscape rotation).
+  const Q0 = new THREE.Quaternion();
+  Q0.setFromAxisAngle(new THREE.Vector3(0, 0, 1), -orient);
+  q.multiply(Q0);
+
+  return q;
+}
+
 /** Inside this distance the fossil's Y can be refined by the player's Y. */
 const REFINE_RADIUS_M = 5;
 /** Entering this distance counts as a close-approach observation. */
@@ -56,6 +84,12 @@ export class ArService {
   private canvasRef: HTMLCanvasElement | null = null;
   private videoEl: HTMLVideoElement | null = null;
   private videoStream: MediaStream | null = null;
+
+  /** Captured on the first orientation reading after iOS-mode AR starts.
+   *  Subsequent frames apply (referenceQuat^-1 * currentDeviceQuat) so the
+   *  camera starts looking at scene -Z (matches fossil placement) regardless
+   *  of how the iPad was tilted at session start. */
+  private referenceQuat: THREE.Quaternion | null = null;
 
   /** Camera position in XR world space, updated every frame. */
   cameraPosition = signal<{ x: number; z: number }>({ x: 0, z: 0 });
@@ -283,6 +317,7 @@ export class ArService {
       // when the user holds the iPad upright (pitch≈0).
       this.camera.position.set(0, DEVICE_HEIGHT_M, 0);
       this.camera.rotation.set(0, 0, 0);
+      this.referenceQuat = null;  // re-capture on next valid frame
 
       // Debug test marker — bright red sphere 3m in front of camera at
       // ground level. If the user can see this but not the GPS-based
@@ -344,21 +379,25 @@ export class ArService {
 
   private tickFallback(): void {
     const o = this.orientation.orientation();
-    let yaw = 0, ref = 0, deviceHeading = -1, devicePitch = -1;
-    if (o) {
-      ref = this.orientation.headingReference() ?? o.heading;
-      let delta = o.heading - ref;
-      if (delta > 180) delta -= 360;
-      if (delta < -180) delta += 360;
-      yaw = -(delta * Math.PI) / 180;
-      deviceHeading = o.heading;
-      devicePitch = o.pitch;
+    const raw = this.orientation.rawOrientation();
+    let deviceHeading = -1, devicePitch = -1;
+    if (o) { deviceHeading = o.heading; devicePitch = o.pitch; }
+
+    if (raw) {
+      // Standard pattern from Three.js DeviceOrientationControls: convert
+      // (alpha, beta, gamma) + screen orientation into a quaternion that
+      // represents the device's pose in world space. Then divide by the
+      // reference quaternion captured at session start so the camera starts
+      // facing scene -Z and rotates relative to the user's initial pose.
+      const screenAngleDeg = (screen.orientation?.angle ?? 0);
+      const current = quatFromDeviceOrientation(raw.alpha, raw.beta, raw.gamma, screenAngleDeg);
+      if (!this.referenceQuat) {
+        this.referenceQuat = current.clone();
+      }
+      // camera = ref^-1 * current
+      const refInv = this.referenceQuat.clone().invert();
+      this.camera.quaternion.copy(refInv).multiply(current);
     }
-    // Force pitch=0 — camera always horizontal. Device tilt no longer points
-    // the camera away from the fossils. User looks around by rotating the
-    // device about its vertical axis (yaw).
-    this.camera.rotation.order = 'YXZ';
-    this.camera.rotation.set(0, yaw, 0);
 
     // Push debug values at most 4×/sec to avoid signal-update thrash.
     const now = performance.now();
@@ -368,8 +407,10 @@ export class ArService {
       const cy = this.camera.position.y;
       const cz = this.camera.position.z;
       const fc = this.fossilMeshes.size;
+      const ref = this.orientation.headingReference() ?? deviceHeading;
+      const e = new THREE.Euler().setFromQuaternion(this.camera.quaternion, 'YXZ');
       this.ngZone.run(() => this.iosDebug.set({
-        heading: deviceHeading, pitch: devicePitch, ref, yaw, camPitch: 0,
+        heading: deviceHeading, pitch: devicePitch, ref, yaw: e.y, camPitch: e.x,
         fossilCount: fc, camX: cx, camY: cy, camZ: cz,
       }));
     }

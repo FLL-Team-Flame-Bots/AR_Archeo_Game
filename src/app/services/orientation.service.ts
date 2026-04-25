@@ -13,6 +13,12 @@ export class OrientationService {
   orientation = signal<DeviceOrientation | null>(null);
   permissionDenied = signal(false);
 
+  /** Raw alpha/beta/gamma straight from the event (degrees). Needed for the
+   *  iOS fallback's quaternion-based camera rotation, which has to handle
+   *  arbitrary screen orientation (portrait vs landscape) — the cooked
+   *  heading/pitch above is portrait-only. */
+  rawOrientation = signal<{ alpha: number; beta: number; gamma: number } | null>(null);
+
   /** Heading captured at AR session start. WebXR's world-space axes are
    *  anchored to whatever direction the device was facing at that moment,
    *  so all subsequent compass-to-XR projections must use this as their
@@ -71,6 +77,11 @@ export class OrientationService {
           : (360 - (e.alpha ?? 0)) % 360;
 
         this.orientation.set({ heading, pitch, roll: e.gamma ?? 0 });
+        this.rawOrientation.set({
+          alpha: e.alpha ?? 0,
+          beta: e.beta ?? 0,
+          gamma: e.gamma ?? 0,
+        });
       });
     };
     // Prefer absolute (true compass) over relative orientation when available.
