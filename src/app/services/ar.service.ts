@@ -401,27 +401,11 @@ export class ArService {
       devicePitch = o.pitch;
     }
 
-    // Pitch — picks beta or gamma based on screen orientation. Clamped to
-    // ±60° so a hand twitch can't rotate the camera into the floor/sky.
-    let pitchRad = 0;
-    if (raw) {
-      const angle = (((screen.orientation?.angle
-        ?? (window as unknown as { orientation?: number }).orientation
-        ?? 0) % 360) + 360) % 360;
-      let pitchDeg = 0;
-      if (angle === 90) {
-        pitchDeg = raw.gamma;
-      } else if (angle === 270) {
-        pitchDeg = -raw.gamma;
-      } else if (angle === 180) {
-        pitchDeg = -(raw.beta - 90);
-      } else {
-        pitchDeg = raw.beta - 90;
-      }
-      pitchDeg = Math.max(-60, Math.min(60, pitchDeg));
-      pitchRad = (pitchDeg * Math.PI) / 180;
-      if (!isFinite(pitchRad)) pitchRad = 0;
-    }
+    // Pitch is hard-coded to 0 in iOS fallback. The iPad's beta/gamma values
+    // in landscape orientations can pin the clamp to its limits and put the
+    // camera looking at the floor — better to give up vertical pan than to
+    // hide the scene. Yaw still works for left/right.
+    const pitchRad = 0;
 
     this.camera.rotation.order = 'YXZ';
     this.camera.rotation.set(pitchRad, yaw, 0);
