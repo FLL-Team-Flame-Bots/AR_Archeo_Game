@@ -83,7 +83,7 @@ const SHINY_CHANCE = 0.01;
           </p>
           <p class="hint error" *ngIf="arService.error()">{{ arService.error() }}</p>
 
-          <div class="splash-version">v4.0.15-ios</div>
+          <div class="splash-version">v4.0.16-ios</div>
         </div>
       </div>
 
@@ -660,12 +660,18 @@ export class ArViewComponent implements OnInit, OnDestroy {
     void this.account.setDisplayName(name);
   }
 
-  /** Click on the AR overlay. Only raycast for fossils when the click was on
-   *  the overlay itself (empty AR space) — clicks on HUD buttons or modal
-   *  panels inside already handle themselves, and bubble up here with a
-   *  different event.target. */
+  /** Click on the AR overlay. Raycast for fossils only when the click was
+   *  on a transparent area (no button or modal). Clicks on interactive
+   *  elements bubble up here too, so we check target.closest() instead of
+   *  the strict equality used previously — iOS sometimes reports the
+   *  bubbled target slightly differently than the originating element. */
   onOverlayTap(event: MouseEvent): void {
-    if (event.target !== event.currentTarget) return;
+    const t = event.target as HTMLElement | null;
+    if (t?.closest(
+      'button, input, textarea, select, app-fossil-card, app-leaderboard, ' +
+      'app-display-name, .collection-panel, .grid-toggle, .icon-btn, ' +
+      '.start-ar-btn, .ar-btn, .close-btn, .collect-btn, .dn-btn',
+    )) return;
     if (!this.arService.active()) return;
     this.arService.handleTap(event.clientX, event.clientY);
   }

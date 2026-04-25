@@ -86,7 +86,7 @@ export interface FossilDirection {
       </ng-container>
 
       <!-- Version stamp -->
-      <div class="version-stamp">v4.0.15-ios</div>
+      <div class="version-stamp">v4.0.16-ios</div>
 
       <!-- Bottom bar -->
       <div class="bottom-bar">
@@ -98,7 +98,10 @@ export interface FossilDirection {
     </div>
   `,
   styles: [`
-    .hud { position: fixed; inset: 0; pointer-events: none; display: flex; flex-direction: column; z-index: 20; }
+    /* pointer-events: auto here (not none) so deeply-nested HUD buttons
+       are reachable on iOS Safari. Empty-area taps bubble up to the
+       parent .ar-overlay where they're routed to the AR raycaster. */
+    .hud { position: fixed; inset: 0; display: flex; flex-direction: column; z-index: 20; }
 
     .top-bar {
       display: flex; justify-content: space-between; align-items: center;
