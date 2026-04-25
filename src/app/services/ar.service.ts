@@ -379,39 +379,24 @@ export class ArService {
 
   private tickFallback(): void {
     const o = this.orientation.orientation();
-    const raw = this.orientation.rawOrientation();
-    let yaw = 0, ref = 0, pitchRad = 0;
+    let yaw = 0, ref = 0;
     let deviceHeading = -1, devicePitch = -1;
     if (o) {
-      // Yaw: same as v4.0.10 (worked). Heading delta from session-start ref.
+      // Yaw only — same simple math as v4.0.10 where left/right + scene
+      // rendering worked. Pitch stays at 0 (camera horizontal). We can
+      // layer pitch back in once the base case is stable.
       ref = this.orientation.headingReference() ?? o.heading;
       let delta = o.heading - ref;
       if (delta > 180) delta -= 360;
       if (delta < -180) delta += 360;
       yaw = -(delta * Math.PI) / 180;
+      if (!isFinite(yaw)) yaw = 0;
       deviceHeading = o.heading;
       devicePitch = o.pitch;
     }
-    // Pitch: derive from raw beta/gamma + screen orientation. Portrait uses
-    // (beta - 90); landscape uses gamma with sign by rotation direction.
-    if (raw) {
-      const angle = (((screen.orientation?.angle
-        ?? (window as unknown as { orientation?: number }).orientation
-        ?? 0) % 360) + 360) % 360;
-      let pitchDeg = 0;
-      if (angle === 90) {
-        pitchDeg = -raw.gamma;
-      } else if (angle === 270) {
-        pitchDeg = raw.gamma;
-      } else if (angle === 180) {
-        pitchDeg = -(raw.beta - 90);
-      } else {  // 0 (portrait) or unknown
-        pitchDeg = raw.beta - 90;
-      }
-      pitchRad = (pitchDeg * Math.PI) / 180;
-    }
     this.camera.rotation.order = 'YXZ';
-    this.camera.rotation.set(pitchRad, yaw, 0);
+    this.camera.rotation.set(0, yaw, 0);
+    const pitchRad = 0;
 
     // Push debug values at most 4×/sec to avoid signal-update thrash.
     const now = performance.now();
