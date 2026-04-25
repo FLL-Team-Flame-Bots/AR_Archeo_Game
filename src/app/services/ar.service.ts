@@ -382,9 +382,14 @@ export class ArService {
     let yaw = 0, ref = 0;
     let deviceHeading = -1, devicePitch = -1;
     if (o) {
-      // Yaw only — same simple math as v4.0.10 where left/right + scene
-      // rendering worked. Pitch stays at 0 (camera horizontal). We can
-      // layer pitch back in once the base case is stable.
+      // Lazy-capture the heading reference on the first frame we have a
+      // valid orientation reading. The poll in ar-view.onStartAR tries for
+      // 3s but iOS sometimes only delivers events after a slow permission
+      // dialog — without this safety net, ref defaults to current heading
+      // every frame and delta is always 0 (scene glued to camera).
+      if (this.orientation.headingReference() === null) {
+        this.orientation.captureHeadingReference();
+      }
       ref = this.orientation.headingReference() ?? o.heading;
       let delta = o.heading - ref;
       if (delta > 180) delta -= 360;
