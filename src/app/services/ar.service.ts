@@ -380,32 +380,38 @@ export class ArService {
   private tickFallback(): void {
     const o = this.orientation.orientation();
     const raw = this.orientation.rawOrientation();
+    let yaw = 0, ref = 0, pitchRad = 0;
     let deviceHeading = -1, devicePitch = -1;
-    if (o) { deviceHeading = o.heading; devicePitch = o.pitch; }
-
-    if (raw) {
-      // Standard pattern from Three.js DeviceOrientationControls: convert
-      // (alpha, beta, gamma) + screen orientation into a quaternion that
-      // represents the device's pose in world space. Then divide by the
-      // reference quaternion captured at session start so the camera starts
-      // facing scene -Z and rotates relative to the user's initial pose.
-      const screenAngleDeg = (screen.orientation?.angle
-        ?? (window as unknown as { orientation?: number }).orientation
-        ?? 0);
-      const current = quatFromDeviceOrientation(raw.alpha, raw.beta, raw.gamma, screenAngleDeg);
-      if (!this.referenceQuat) {
-        this.referenceQuat = current.clone();
-      }
-      // camera = ref^-1 * current
-      const refInv = this.referenceQuat.clone().invert();
-      this.camera.quaternion.copy(refInv).multiply(current);
-      // Flip pitch — the standard formula gives the direction the back
-      // camera points, but our scene wants "look up = scene tilts up".
-      // Empirically iOS reports pitch reversed for our use case.
-      const e = new THREE.Euler().setFromQuaternion(this.camera.quaternion, 'YXZ');
-      e.x = -e.x;
-      this.camera.quaternion.setFromEuler(e);
+    if (o) {
+      // Yaw: same as v4.0.10 (worked). Heading delta from session-start ref.
+      ref = this.orientation.headingReference() ?? o.heading;
+      let delta = o.heading - ref;
+      if (delta > 180) delta -= 360;
+      if (delta < -180) delta += 360;
+      yaw = -(delta * Math.PI) / 180;
+      deviceHeading = o.heading;
+      devicePitch = o.pitch;
     }
+    // Pitch: derive from raw beta/gamma + screen orientation. Portrait uses
+    // (beta - 90); landscape uses gamma with sign by rotation direction.
+    if (raw) {
+      const angle = (((screen.orientation?.angle
+        ?? (window as unknown as { orientation?: number }).orientation
+        ?? 0) % 360) + 360) % 360;
+      let pitchDeg = 0;
+      if (angle === 90) {
+        pitchDeg = -raw.gamma;
+      } else if (angle === 270) {
+        pitchDeg = raw.gamma;
+      } else if (angle === 180) {
+        pitchDeg = -(raw.beta - 90);
+      } else {  // 0 (portrait) or unknown
+        pitchDeg = raw.beta - 90;
+      }
+      pitchRad = (pitchDeg * Math.PI) / 180;
+    }
+    this.camera.rotation.order = 'YXZ';
+    this.camera.rotation.set(pitchRad, yaw, 0);
 
     // Push debug values at most 4×/sec to avoid signal-update thrash.
     const now = performance.now();
@@ -415,10 +421,8 @@ export class ArService {
       const cy = this.camera.position.y;
       const cz = this.camera.position.z;
       const fc = this.fossilMeshes.size;
-      const ref = this.orientation.headingReference() ?? deviceHeading;
-      const e = new THREE.Euler().setFromQuaternion(this.camera.quaternion, 'YXZ');
       this.ngZone.run(() => this.iosDebug.set({
-        heading: deviceHeading, pitch: devicePitch, ref, yaw: e.y, camPitch: e.x,
+        heading: deviceHeading, pitch: devicePitch, ref, yaw, camPitch: pitchRad,
         fossilCount: fc, camX: cx, camY: cy, camZ: cz,
       }));
     }

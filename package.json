@@ -1,6 +1,6 @@
 {
   "name": "ar-archeo-game",
-  "version": "4.0.12-ios",
+  "version": "4.0.13-ios",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
