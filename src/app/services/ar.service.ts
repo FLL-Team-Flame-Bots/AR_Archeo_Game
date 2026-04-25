@@ -379,6 +379,7 @@ export class ArService {
 
   private tickFallback(): void {
     const o = this.orientation.orientation();
+    const raw = this.orientation.rawOrientation();
     let yaw = 0, ref = 0;
     let deviceHeading = -1, devicePitch = -1;
     if (o) {
@@ -399,9 +400,31 @@ export class ArService {
       deviceHeading = o.heading;
       devicePitch = o.pitch;
     }
+
+    // Pitch — picks beta or gamma based on screen orientation. Clamped to
+    // ±60° so a hand twitch can't rotate the camera into the floor/sky.
+    let pitchRad = 0;
+    if (raw) {
+      const angle = (((screen.orientation?.angle
+        ?? (window as unknown as { orientation?: number }).orientation
+        ?? 0) % 360) + 360) % 360;
+      let pitchDeg = 0;
+      if (angle === 90) {
+        pitchDeg = raw.gamma;
+      } else if (angle === 270) {
+        pitchDeg = -raw.gamma;
+      } else if (angle === 180) {
+        pitchDeg = -(raw.beta - 90);
+      } else {
+        pitchDeg = raw.beta - 90;
+      }
+      pitchDeg = Math.max(-60, Math.min(60, pitchDeg));
+      pitchRad = (pitchDeg * Math.PI) / 180;
+      if (!isFinite(pitchRad)) pitchRad = 0;
+    }
+
     this.camera.rotation.order = 'YXZ';
-    this.camera.rotation.set(0, yaw, 0);
-    const pitchRad = 0;
+    this.camera.rotation.set(pitchRad, yaw, 0);
 
     // Push debug values at most 4×/sec to avoid signal-update thrash.
     const now = performance.now();
