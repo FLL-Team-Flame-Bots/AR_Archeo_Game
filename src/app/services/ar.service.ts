@@ -91,6 +91,10 @@ export class ArService {
    *  of how the iPad was tilted at session start. */
   private referenceQuat: THREE.Quaternion | null = null;
 
+  /** Low-pass-smoothed pitch from gravity, in radians. Persists across
+   *  frames so we can blend new readings into the previous value. */
+  private smoothedPitchRad = 0;
+
   /** Camera position in XR world space, updated every frame. */
   cameraPosition = signal<{ x: number; z: number }>({ x: 0, z: 0 });
 
@@ -318,6 +322,7 @@ export class ArService {
       this.camera.position.set(0, DEVICE_HEIGHT_M, 0);
       this.camera.rotation.set(0, 0, 0);
       this.referenceQuat = null;  // re-capture on next valid frame
+      this.smoothedPitchRad = 0;
 
       // Debug test marker — bright red sphere 3m in front of camera at
       // ground level. If the user can see this but not the GPS-based
@@ -401,11 +406,25 @@ export class ArService {
       devicePitch = o.pitch;
     }
 
-    // Pitch is hard-coded to 0 in iOS fallback. The iPad's beta/gamma values
-    // in landscape orientations can pin the clamp to its limits and put the
-    // camera looking at the floor — better to give up vertical pan than to
-    // hide the scene. Yaw still works for left/right.
-    const pitchRad = 0;
+    // Pitch from gravity (DeviceMotion). Orientation-independent: in any
+    // device pose, asin(gz / |g|) gives the angle between the device's
+    // back-camera axis and horizontal. Negative = camera looking down.
+    const g = this.orientation.gravity();
+    let pitchRad = this.smoothedPitchRad;
+    if (g) {
+      const mag = Math.sqrt(g.x * g.x + g.y * g.y + g.z * g.z);
+      if (mag > 0.1) {
+        const raw = Math.asin(Math.max(-1, Math.min(1, g.z / mag)));
+        // Low-pass filter to kill accelerometer jitter.
+        pitchRad = 0.85 * this.smoothedPitchRad + 0.15 * raw;
+        if (!isFinite(pitchRad)) pitchRad = 0;
+        // Safety clamp: ±70° so a bad reading can't put the camera in the
+        // floor or sky.
+        const limit = (70 * Math.PI) / 180;
+        pitchRad = Math.max(-limit, Math.min(limit, pitchRad));
+        this.smoothedPitchRad = pitchRad;
+      }
+    }
 
     this.camera.rotation.order = 'YXZ';
     this.camera.rotation.set(pitchRad, yaw, 0);
@@ -419,7 +438,8 @@ export class ArService {
       const cz = this.camera.position.z;
       const fc = this.fossilMeshes.size;
       this.ngZone.run(() => this.iosDebug.set({
-        heading: deviceHeading, pitch: devicePitch, ref, yaw, camPitch: pitchRad,
+        heading: deviceHeading, pitch: devicePitch, ref, yaw,
+        camPitch: this.smoothedPitchRad,
         fossilCount: fc, camX: cx, camY: cy, camZ: cz,
       }));
     }

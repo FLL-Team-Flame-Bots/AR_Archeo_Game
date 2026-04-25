@@ -83,7 +83,7 @@ const SHINY_CHANCE = 0.01;
           </p>
           <p class="hint error" *ngIf="arService.error()">{{ arService.error() }}</p>
 
-          <div class="splash-version">v4.0.18-ios</div>
+          <div class="splash-version">v4.0.19-ios</div>
         </div>
       </div>
 

@@ -27,7 +27,14 @@ export class OrientationService {
    *  player happened to be facing. */
   headingReference = signal<number | null>(null);
 
+  /** accelerationIncludingGravity from the most recent devicemotion event,
+   *  in m/s². Used by the iOS fallback to derive pitch from gravity (which
+   *  is orientation-independent) — avoids the beta/gamma entanglement that
+   *  Euler-based pitch math hits in landscape. */
+  gravity = signal<{ x: number; y: number; z: number } | null>(null);
+
   private bound!: (e: DeviceOrientationEvent) => void;
+  private boundMotion?: (e: DeviceMotionEvent) => void;
   private boundEvent: 'deviceorientationabsolute' | 'deviceorientation' = 'deviceorientation';
 
   constructor(private ngZone: NgZone) {}
@@ -42,19 +49,36 @@ export class OrientationService {
   }
   clearHeadingReference(): void { this.headingReference.set(null); }
 
-  /** Call this on a user gesture (button tap) — required on iOS 13+ */
+  /** Call this on a user gesture (button tap) — required on iOS 13+.
+   *  Asks for both DeviceOrientation (compass/heading) and DeviceMotion
+   *  (gravity for pitch) permissions in parallel. */
   async requestPermission(): Promise<boolean> {
-    // iOS 13+ gate
     const DOE = DeviceOrientationEvent as unknown as {
       requestPermission?: () => Promise<'granted' | 'denied'>;
     };
+    const DME = DeviceMotionEvent as unknown as {
+      requestPermission?: () => Promise<'granted' | 'denied'>;
+    };
+    let orientGranted = true;
+    let motionGranted = true;
     if (typeof DOE.requestPermission === 'function') {
       const result = await DOE.requestPermission();
-      if (result !== 'granted') {
-        this.permissionDenied.set(true);
-        return false;
+      orientGranted = result === 'granted';
+    }
+    if (typeof DME.requestPermission === 'function') {
+      try {
+        const result = await DME.requestPermission();
+        motionGranted = result === 'granted';
+      } catch {
+        motionGranted = false;
       }
     }
+    if (!orientGranted) {
+      this.permissionDenied.set(true);
+      return false;
+    }
+    // Motion permission is optional — yaw still works without it, you just
+    // lose pitch. So we don't fail the whole flow if it's denied.
     return true;
   }
 
@@ -91,10 +115,21 @@ export class OrientationService {
       this.boundEvent = 'deviceorientation';
     }
     window.addEventListener(this.boundEvent, this.bound as EventListener, true);
+
+    // devicemotion: capture accelerationIncludingGravity for pitch derivation.
+    this.boundMotion = (e: DeviceMotionEvent) => {
+      const g = e.accelerationIncludingGravity;
+      if (!g || g.x == null || g.y == null || g.z == null) return;
+      this.ngZone.run(() => {
+        this.gravity.set({ x: g.x!, y: g.y!, z: g.z! });
+      });
+    };
+    window.addEventListener('devicemotion', this.boundMotion, true);
   }
 
   stop(): void {
     if (this.bound) window.removeEventListener(this.boundEvent, this.bound as EventListener, true);
+    if (this.boundMotion) window.removeEventListener('devicemotion', this.boundMotion, true);
   }
 
   /**

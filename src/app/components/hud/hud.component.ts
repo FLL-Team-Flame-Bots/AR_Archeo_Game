@@ -86,7 +86,7 @@ export interface FossilDirection {
       </ng-container>
 
       <!-- Version stamp -->
-      <div class="version-stamp">v4.0.18-ios</div>
+      <div class="version-stamp">v4.0.19-ios</div>
 
       <!-- Bottom bar -->
       <div class="bottom-bar">
