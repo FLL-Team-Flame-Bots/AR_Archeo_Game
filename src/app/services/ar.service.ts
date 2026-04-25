@@ -389,7 +389,9 @@ export class ArService {
       // represents the device's pose in world space. Then divide by the
       // reference quaternion captured at session start so the camera starts
       // facing scene -Z and rotates relative to the user's initial pose.
-      const screenAngleDeg = (screen.orientation?.angle ?? 0);
+      const screenAngleDeg = (screen.orientation?.angle
+        ?? (window as unknown as { orientation?: number }).orientation
+        ?? 0);
       const current = quatFromDeviceOrientation(raw.alpha, raw.beta, raw.gamma, screenAngleDeg);
       if (!this.referenceQuat) {
         this.referenceQuat = current.clone();
@@ -397,6 +399,12 @@ export class ArService {
       // camera = ref^-1 * current
       const refInv = this.referenceQuat.clone().invert();
       this.camera.quaternion.copy(refInv).multiply(current);
+      // Flip pitch — the standard formula gives the direction the back
+      // camera points, but our scene wants "look up = scene tilts up".
+      // Empirically iOS reports pitch reversed for our use case.
+      const e = new THREE.Euler().setFromQuaternion(this.camera.quaternion, 'YXZ');
+      e.x = -e.x;
+      this.camera.quaternion.setFromEuler(e);
     }
 
     // Push debug values at most 4×/sec to avoid signal-update thrash.
