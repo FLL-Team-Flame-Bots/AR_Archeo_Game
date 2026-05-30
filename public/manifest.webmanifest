@@ -2,6 +2,7 @@
   "name": "AR_Archeo_Game",
   "short_name": "AR_Archeo_Game",
   "display": "standalone",
+  "orientation": "portrait",
   "scope": "./",
   "start_url": "./",
   "icons": [

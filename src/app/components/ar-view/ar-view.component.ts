@@ -24,7 +24,7 @@ const AREA_CELL_M = 10;
 /** Cells in each direction around the player that stay populated. A value
  *  of 1 means a 3×3 ring of cells is always alive around the player. */
 const ACTIVE_RADIUS_CELLS = 1;
-/** Player must be within this many metres of a fossil's GPS location to
+/** Player must be within this many meters of a fossil's GPS location to
  *  open its card. Stops you grabbing fossils from across the field. */
 const COLLECT_RADIUS_M = 1;
 /** Fossils within this range of the player are shown in AR. */
@@ -76,14 +76,16 @@ const SHINY_CHANCE = 0.01;
           </button>
 
           <p class="hint" *ngIf="!arService.supported()">
-            ⚠️ AR not detected — needs camera + orientation sensors (Chrome on Android, or Safari on iOS)
+            ⚠️ AR not detected — please open this page on an iPhone in Safari.
           </p>
           <p class="hint ios" *ngIf="arService.supported() && arService.iosFallback()">
-            iOS mode: stand still and rotate your device to look around. Tap any fossil you see.
+            Walk around your iPhone to find fossils. Tap one to collect.
+            <br><br>
+            (The environment may take a few seconds to load in after starting AR.)
           </p>
           <p class="hint error" *ngIf="arService.error()">{{ arService.error() }}</p>
 
-          <div class="splash-version">v4.0.19-ios</div>
+          <div class="splash-version">v4.4.0-iphone-8thwall</div>
         </div>
       </div>
 
@@ -194,63 +196,46 @@ const SHINY_CHANCE = 0.01;
         </div>
       </div>
 
-      <!-- iOS-mode debug readout -->
-      <div class="floor-debug" *ngIf="arService.active() && arService.iosFallback() && arService.iosDebug() as d">
-        <div class="floor-debug-row">
-          <span class="floor-debug-label">hdg:</span>
-          <span class="floor-debug-value">{{ d.heading.toFixed(1) }}</span>
-          <span class="floor-debug-label">ref:</span>
-          <span class="floor-debug-value">{{ d.ref.toFixed(1) }}</span>
-        </div>
-        <div class="floor-debug-row">
-          <span class="floor-debug-label">yaw:</span>
-          <span class="floor-debug-value">{{ (d.yaw * 57.2958).toFixed(1) }}°</span>
-          <span class="floor-debug-label">tilt:</span>
-          <span class="floor-debug-value">{{ d.pitch.toFixed(0) }}°</span>
-        </div>
-        <div class="floor-debug-row">
-          <span class="floor-debug-label">fossils:</span>
-          <span class="floor-debug-value">{{ d.fossilCount }}</span>
-        </div>
-        <div class="floor-debug-row">
-          <span class="floor-debug-label">cam:</span>
-          <span class="floor-debug-value">{{ d.camX.toFixed(1) }},{{ d.camY.toFixed(1) }},{{ d.camZ.toFixed(1) }}</span>
+      <!-- Orientation lock: 8th Wall tracks correctly in upright portrait,
+           which is angle 0 on phones (natural portrait) or angle 270 on
+           iPads with landscape-natural orientation. Show this overlay in
+           any other angle EXCEPT when the device is tilted significantly
+           (gravity-derived pitch beyond ±45°) — iOS's reported angle
+           isn't reliable when flat, and a transient reading shouldn't
+           kick the user out of AR for tilting to look at the floor. -->
+      <div class="rotate-prompt" *ngIf="shouldShowRotatePrompt()">
+        <div class="rotate-prompt-inner">
+          <div class="rotate-icon">🔄</div>
+          <div class="rotate-title">Rotate to portrait</div>
+          <div class="rotate-sub">
+            Hold your iPhone upright in <b>portrait</b> mode.
+            <br><br>
+            (AR tracking only works when the iPhone is held vertical.)
+          </div>
         </div>
       </div>
 
-      <!-- Floor-detection debug readout (WebXR mode only) -->
-      <div class="floor-debug" *ngIf="arService.active() && !arService.iosFallback()">
-        <div class="floor-debug-row">
-          <span class="floor-debug-label">Floor:</span>
-          <span class="floor-debug-value"
-                [class.ok]="arService.groundYSignal() !== null"
-                [class.waiting]="arService.groundYSignal() === null">
-            {{ arService.groundYSignal() === null
-                ? 'searching…'
-                : 'y=' + arService.groundYSignal()!.toFixed(2) + 'm' }}
-          </span>
-        </div>
-        <div class="floor-debug-row">
-          <span class="floor-debug-label">hits:</span>
-          <span class="floor-debug-value">{{ arService.hitCount() }}</span>
-          <span class="floor-debug-label">rej:</span>
-          <span class="floor-debug-value">{{ arService.rejectedCount() }}</span>
-        </div>
-        <div class="floor-debug-row" *ngIf="arService.lastReject()">
-          <span class="floor-debug-label">last:</span>
-          <span class="floor-debug-value">{{ arService.lastReject() }}</span>
-        </div>
-        <button class="grid-toggle" (click)="toggleGrid()"
-                [class.on]="showGrid()">
-          Grid: {{ showGrid() ? 'ON' : 'OFF' }}
-        </button>
+      <!-- 8th Wall attribution (required by engine-binary license, iOS path only) -->
+      <a class="xr8-credit" *ngIf="arService.iosFallback()"
+         href="https://8thwall.org" target="_blank" rel="noopener">
+        Powered by 8th Wall
+      </a>
+
+      <!-- In-AR "loading environment" message — auto-hides ~5s after AR starts. -->
+      <div class="env-loading" *ngIf="arService.active() && environmentLoading()">
+        Loading environment…
       </div>
+
     </div>
   `,
   styles: [`
     .ar-container { position: fixed; inset: 0; background: #1a0f00; }
-    .ar-canvas    { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
-    .ar-overlay   { position: fixed; inset: 0; pointer-events: auto; }
+    /* 8th Wall's FullWindowCanvas pipeline module sets inline styles on the
+       canvas (position, size, sometimes z-index). Force it under our UI with
+       !important, and disable pointer events so taps fall through to .ar-overlay
+       (which handles them via onOverlayTap → handleTap raycast). */
+    .ar-canvas    { position: fixed !important; inset: 0; width: 100% !important; height: 100% !important; display: block; z-index: 0 !important; pointer-events: none !important; }
+    .ar-overlay   { position: fixed; inset: 0; z-index: 5; pointer-events: auto; }
 
     .no-ar-bg {
       position: fixed; inset: 0; z-index: 10;
@@ -451,26 +436,39 @@ const SHINY_CHANCE = 0.01;
       0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
       100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
     }
-    .floor-debug {
-      position: fixed; top: 58px; left: 12px;
-      background: rgba(0,0,0,0.6); color: #f5e6c8;
-      border: 1px solid rgba(255,215,0,0.3);
-      border-radius: 8px; padding: 6px 10px;
-      font-size: 11px; font-family: monospace; line-height: 1.4;
-      pointer-events: none; z-index: 30;
+    .xr8-credit {
+      position: fixed; bottom: 6px; right: 8px; z-index: 40;
+      font-size: 10px; font-family: monospace; letter-spacing: 0.3px;
+      color: rgba(245,230,200,0.55); text-decoration: none;
+      background: rgba(0,0,0,0.35); padding: 2px 6px; border-radius: 4px;
+      pointer-events: auto;
     }
-    .floor-debug-row { display: flex; gap: 6px; }
-    .floor-debug-label { color: rgba(200,168,107,0.7); }
-    .floor-debug-value { color: #f5e6c8; }
-    .floor-debug-value.ok      { color: #4ade80; font-weight: 600; }
-    .floor-debug-value.waiting { color: #facc15; }
-    .grid-toggle {
-      margin-top: 4px; padding: 3px 8px;
-      background: rgba(0,0,0,0.5); border: 1px solid rgba(255,215,0,0.4);
-      color: #f5e6c8; font-family: monospace; font-size: 11px;
-      border-radius: 4px; cursor: pointer; pointer-events: all;
+    .xr8-credit:hover { color: rgba(255,215,0,0.85); }
+
+    /* Orientation lock — driven from JS (currentOrientationAngle signal)
+       since CSS @media can only distinguish portrait vs landscape, not
+       portrait-primary vs portrait-secondary. */
+    .rotate-prompt {
+      display: flex;
+      position: fixed; inset: 0; z-index: 999999;
+      align-items: center; justify-content: center;
+      background: #1a0f00; color: #f5e6c8;
+      pointer-events: auto;
     }
-    .grid-toggle.on { background: rgba(255,215,0,0.25); color: #ffd700; }
+    .rotate-prompt-inner { text-align: center; padding: 24px; max-width: 360px; }
+    .rotate-icon { font-size: 72px; margin-bottom: 12px; }
+    .rotate-title { font-size: 22px; font-weight: 700; color: #ffd700; margin-bottom: 8px; }
+    .rotate-sub { font-size: 13px; color: rgba(245,230,200,0.75); line-height: 1.4; }
+
+    /* Centered "Loading environment…" pill shown for the first few seconds
+       of an AR session while SLAM warms up and the spatial cache seeds. */
+    .env-loading {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      background: rgba(0,0,0,0.7); color: #f5e6c8;
+      border: 1px solid rgba(255,215,0,0.4); border-radius: 24px;
+      padding: 10px 20px; font-size: 14px; font-weight: 600;
+      pointer-events: none; z-index: 50;
+    }
   `]
 })
 export class ArViewComponent implements OnInit, OnDestroy {
@@ -508,6 +506,33 @@ export class ArViewComponent implements OnInit, OnDestroy {
   showCollection = signal(false);
   showLearn = false;
   showLeaderboard = signal(false);
+  /** Live screen-orientation angle, kept in sync via JS so the orientation-
+   *  lock overlay can show/hide reactively. Only angle=180 (upside-down
+   *  portrait, back camera at bottom) is supported by 8th Wall on iPad. */
+  currentOrientationAngle = signal<number>(0);
+  private boundOrientationListener?: () => void;
+
+  /** True for the first ~6s after AR starts. Drives the "Loading environment…"
+   *  pill so users don't think the app is broken before SLAM stabilizes and
+   *  the first fossils get placed. */
+  environmentLoading = signal(false);
+  private envLoadingTimeout = 0;
+
+  /** True when the rotate-prompt overlay should be visible. False when
+   *  the device is held in an upright portrait pose OR the device is
+   *  tilted significantly off-vertical (in which case iOS's reported
+   *  angle is unreliable and a transient reading shouldn't kick the user
+   *  out of AR). Allows BOTH angle 0 (phones — natural portrait) and
+   *  angle 270 (iPads with landscape-natural orientation — "portrait
+   *  with camera at bottom"). Both are functionally the same physical
+   *  pose, just reported differently by different device types. */
+  shouldShowRotatePrompt = computed(() => {
+    const angle = this.currentOrientationAngle();
+    if (angle === 0 || angle === 270) return false;
+    const pitch = this.orientation.gravityPitchDeg();
+    if (pitch !== null && Math.abs(pitch) > 45) return false;
+    return true;
+  });
   /** Modal gate: true while we have a Firebase user but no chosen name. */
   needsDisplayName = computed(
     () => !!this.account.user() && !this.account.displayName(),
@@ -529,34 +554,40 @@ export class ArViewComponent implements OnInit, OnDestroy {
    *  remembers them; collected ones are tracked separately so they don't
    *  respawn while the rest of the cell still might. */
   private cellStates = new Map<string, { fossils: FossilLocation[]; collected: Set<string> }>();
-  /** Cached cell key the player was in last time we regenerated the AR grid overlay. */
-  private lastGridKey = '';
   /** "Walk closer — Xm away" toast shown when the player taps a far fossil. */
   tooFarToast = signal<string | null>(null);
   private tooFarTimeout = 0;
   private captureTimeout = 0;
   private captureOriginTimeout = 0;
-  /** When false, the AR grid overlay is hidden. */
-  showGrid = signal(true);
 
-  toggleGrid(): void {
-    const next = !this.showGrid();
-    this.showGrid.set(next);
-    if (!next) {
-      this.arService.clearGrid();
-      this.lastGridKey = '';
-    } else {
-      const pos = this.gps.playerPosition();
-      if (pos) this.refreshGridOverlay(pos);
+  /** Wipe persisted cell rolls + already-placed fossils and re-roll. Lets
+   *  testers re-spawn fossils without manually clearing browser data.
+   *  Collected fossils (LS_COLLECTION) are kept — only the spawn pool resets. */
+  resetSpawnedCells(): void {
+    this.cellStates.clear();
+    try { localStorage.removeItem(LS_CELL_STATES); } catch { /* ignore */ }
+    this.allFossils().forEach(f => this.arService.removeFossil(f.id));
+    this.placedFossilIds.clear();
+    this.allFossils.set([]);
+    this.gps.loadFossils([]);
+    const pos = this.precisePosition() ?? this.gps.playerPosition();
+    if (pos) {
+      this.replenishFossils(pos);
+      this.syncARMarkers(this.preciseNearby());
     }
   }
 
   /** Bearing + distance to every active uncollected fossil, for the HUD radar/arrows.
-   *  Uses XR-derived precise position when AR is active. */
+   *  Uses XR-derived precise position when AR is active.
+   *  Adds 180° to the live heading so the radar matches the camera direction
+   *  on iOS in landscape — webkitCompassHeading reports the device's portrait-
+   *  top direction, which is opposite the camera (back of device) when held
+   *  upright. AR placement uses headingReference captured at session start
+   *  (consistent within the XR frame) so it doesn't need this correction. */
   fossilDirections = computed(() => {
     const all = this.allFossils();
     const pos = this.precisePosition();
-    const heading = this.orientation.orientation()?.heading ?? 0;
+    const heading = (this.orientation.orientation()?.heading ?? 0) + 180;
     if (!pos) return [];
 
     return all
@@ -583,7 +614,7 @@ export class ArViewComponent implements OnInit, OnDestroy {
     const headingRef = this.orientation.headingReference()
       ?? this.orientation.orientation()?.heading ?? 0;
     const headRad = (headingRef * Math.PI) / 180;
-    // Reverse the XR→ENU rotation to get (dE, dN) in metres.
+    // Reverse the XR→ENU rotation to get (dE, dN) in meters.
     const dE =  cam.x * Math.cos(headRad) - cam.z * Math.sin(headRad);
     const dN = -(cam.x * Math.sin(headRad) + cam.z * Math.cos(headRad));
     const cosLat = Math.cos(origin.lat * Math.PI / 180);
@@ -629,15 +660,6 @@ export class ArViewComponent implements OnInit, OnDestroy {
       this.syncARMarkers(nearby);
     });
 
-    // Redraw the AR grid overlay whenever the player crosses into a new cell.
-    effect(() => {
-      const pos = this.precisePosition();
-      const active = this.arService.active();
-      const on = this.showGrid();
-      if (!pos || !active || !on) return;
-      untracked(() => this.refreshGridOverlay(pos));
-    });
-
     // Persist the collection to localStorage whenever it changes.
     effect(() => {
       const fossils = this.collectedFossils();
@@ -669,7 +691,7 @@ export class ArViewComponent implements OnInit, OnDestroy {
     const t = event.target as HTMLElement | null;
     if (t?.closest(
       'button, input, textarea, select, app-fossil-card, app-leaderboard, ' +
-      'app-display-name, .collection-panel, .grid-toggle, .icon-btn, ' +
+      'app-display-name, .collection-panel, .icon-btn, ' +
       '.start-ar-btn, .ar-btn, .close-btn, .collect-btn, .dn-btn',
     )) return;
     if (!this.arService.active()) return;
@@ -719,56 +741,27 @@ export class ArViewComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Builds a 5×5 ring of cells around the player's current cell and pushes
-   *  it to the AR scene as ground-level wireframe lines. */
-  private refreshGridOverlay(pos: { lat: number; lng: number }): void {
-    const step  = AREA_CELL_M / 111_000;
-    const cLat  = Math.floor(pos.lat / step);
-    const cLng  = Math.floor(pos.lng / step);
-    const key   = `${cLat}:${cLng}`;
-    if (key === this.lastGridKey) return;
-    this.lastGridKey = key;
-
-    const RING = 2; // cells on each side → (2*2+1)² = 25 cells
-    // Use the locked-in heading reference so the grid sits in the same
-    // world-XR frame as the fossils (which also use the reference).
-    const headingRef = this.orientation.headingReference()
-      ?? this.orientation.orientation()?.heading ?? 0;
-    const segs: { x1: number; z1: number; x2: number; z2: number }[] = [];
-
-    const project = (lat: number, lng: number): { x: number; z: number } => {
-      const dN = (lat - pos.lat) * 111_000;
-      const dE = (lng - pos.lng) * 111_000 * Math.cos(pos.lat * Math.PI / 180);
-      const headRad = (headingRef * Math.PI) / 180;
-      const x = dE * Math.cos(headRad) - dN * Math.sin(headRad);
-      const z = -(dE * Math.sin(headRad) + dN * Math.cos(headRad));
-      return { x, z };
-    };
-
-    for (let dy = -RING; dy <= RING; dy++) {
-      for (let dx = -RING; dx <= RING; dx++) {
-        const lat0 = (cLat + dy) * step, lat1 = (cLat + dy + 1) * step;
-        const lng0 = (cLng + dx) * step, lng1 = (cLng + dx + 1) * step;
-        const sw = project(lat0, lng0);
-        const nw = project(lat1, lng0);
-        const ne = project(lat1, lng1);
-        const se = project(lat0, lng1);
-        // Four edges per cell. Adjacent cells share edges (drawn twice) — fine
-        // for a few dozen lines and keeps the code simple.
-        segs.push({ x1: sw.x, z1: sw.z, x2: nw.x, z2: nw.z });
-        segs.push({ x1: nw.x, z1: nw.z, x2: ne.x, z2: ne.z });
-        segs.push({ x1: ne.x, z1: ne.z, x2: se.x, z2: se.z });
-        segs.push({ x1: se.x, z1: se.z, x2: sw.x, z2: sw.z });
-      }
-    }
-    this.arService.placeGrid(segs);
-  }
-
   async ngOnInit(): Promise<void> {
     await this.arService.checkSupport();
     await this.arService.init(this.canvasRef.nativeElement);
     this.orientation.start();
     this.gps.startTracking();
+
+    // Track screen orientation live so the rotate-prompt overlay shows
+    // immediately on rotation rather than waiting for a re-render trigger.
+    const readAngle = () => {
+      const a = (window.screen as unknown as { orientation?: { angle: number } }).orientation?.angle
+              ?? (window as unknown as { orientation?: number }).orientation
+              ?? 0;
+      this.currentOrientationAngle.set(a);
+    };
+    readAngle();
+    this.boundOrientationListener = readAngle;
+    window.addEventListener('orientationchange', readAngle);
+    if ((window.screen as unknown as { orientation?: EventTarget }).orientation) {
+      (window.screen as unknown as { orientation: EventTarget }).orientation
+        .addEventListener('change', readAngle);
+    }
 
     // Tap on a fossil's 3D hit sphere → open its card
     this.arService.setTapHandler((fossilId: string) => {
@@ -792,6 +785,12 @@ export class ArViewComponent implements OnInit, OnDestroy {
   }
 
   async onStartAR(): Promise<void> {
+    this.environmentLoading.set(true);
+    clearTimeout(this.envLoadingTimeout);
+    this.envLoadingTimeout = window.setTimeout(
+      () => this.environmentLoading.set(false),
+      6000,
+    );
     await this.orientation.requestPermission();
     await this.arService.startAR(this.overlayRef.nativeElement);
 
@@ -814,7 +813,6 @@ export class ArViewComponent implements OnInit, OnDestroy {
     // already-placed fossils. If GPS isn't ready yet, poll briefly.
     const completeOriginSetup = () => {
       this.placedFossilIds.clear();
-      this.lastGridKey = '';
       this.allFossils().forEach(f => this.arService.removeFossil(f.id));
       const p = this.gps.playerPosition();
       if (p) {
@@ -1048,11 +1046,19 @@ export class ArViewComponent implements OnInit, OnDestroy {
     clearTimeout(this.captureOriginTimeout);
     clearTimeout(this.tooFarTimeout);
     clearTimeout(this.celebrateTimeout);
+    clearTimeout(this.envLoadingTimeout);
     this.gps.stopTracking();
     this.orientation.stop();
     this.orientation.clearHeadingReference();
+    this.orientation.clearStartOrientation();
     this.originPos = null;
     this.placedFossilIds.clear();
     this.arService.stopAR();
+    if (this.boundOrientationListener) {
+      window.removeEventListener('orientationchange', this.boundOrientationListener);
+      const so = (window.screen as unknown as { orientation?: EventTarget }).orientation;
+      if (so) so.removeEventListener('change', this.boundOrientationListener);
+      this.boundOrientationListener = undefined;
+    }
   }
 }

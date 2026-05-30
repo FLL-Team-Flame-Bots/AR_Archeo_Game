@@ -5,7 +5,7 @@ export interface FossilDirection {
   id: string;
   name: string;
   relAngle: number;   // 0 = ahead, 90 = right, 180 = behind, 270 = left
-  distance: number;   // metres
+  distance: number;   // meters
 }
 
 @Component({
@@ -106,7 +106,7 @@ export interface FossilDirection {
     .top-bar {
       display: flex; justify-content: space-between; align-items: center;
       /* Safe-area handles iOS notches + most Android cutouts; small extra
-         margin just ensures the badges don't touch a centred punch-hole. */
+         margin just ensures the badges don't touch a centered punch-hole. */
       padding: calc(env(safe-area-inset-top, 0px) + 16px) 16px 12px;
       background: linear-gradient(180deg, rgba(0,0,0,0.7) 0%, transparent 100%);
       pointer-events: all;

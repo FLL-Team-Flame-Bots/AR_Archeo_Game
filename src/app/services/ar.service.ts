@@ -2,6 +2,35 @@ import { Injectable, NgZone, signal } from '@angular/core';
 import * as THREE from 'three';
 import { DEVICE_HEIGHT_M, OrientationService } from './orientation.service';
 
+/** Minimal typings for the global window.XR8 added by the 8th Wall engine
+ *  binary script tag in index.html. There is no official @types package;
+ *  full API at https://8thwall.org/docs/engine/overview. */
+interface Xr8PipelineModule {
+  name: string;
+  onStart?: (args: { canvas: HTMLCanvasElement; canvasWidth: number; canvasHeight: number }) => void;
+  onUpdate?: (args: { processCpuResult?: unknown; processGpuResult?: unknown; frameStartResult?: unknown }) => void;
+  onException?: (err: unknown) => void;
+  onAttach?: (args: unknown) => void;
+}
+interface Xr8Global {
+  run: (opts: { canvas: HTMLCanvasElement; allowedDevices?: unknown }) => void;
+  stop: () => void;
+  addCameraPipelineModules: (mods: unknown[]) => void;
+  clearCameraPipelineModules: () => void;
+  GlTextureRenderer: { pipelineModule: () => unknown };
+  Threejs: {
+    pipelineModule: () => unknown;
+    xrScene: () => { scene: THREE.Scene; camera: THREE.PerspectiveCamera; renderer: THREE.WebGLRenderer };
+  };
+  XrController: {
+    pipelineModule: () => unknown;
+    configure: (opts: { disableWorldTracking?: boolean; scale?: 'absolute' | 'responsive' }) => void;
+    recenter?: () => void;
+  };
+  XrConfig?: { device: () => { ANY: unknown } };
+}
+
+
 /** Per-fossil ground-height state. Attached to each fossil group's userData.
  *  Converges to the closest observation of the player's groundY and locks
  *  after two distinct approaches inside 1.5 m, so distant fossils on flat
@@ -55,6 +84,20 @@ const CLOSE_APPROACH_IN_M = 1.5;
 const CLOSE_APPROACH_OUT_M = 1.7;
 /** Number of close approaches that lock the fossil's Y forever. */
 const CLOSE_APPROACHES_TO_LOCK = 2;
+/** Side length (m) of each spatial cell in the ground-height cache. Smaller
+ *  cells capture hill variation more finely but require more walking to
+ *  populate; 2 m balances both for human walking speeds. */
+const GROUND_CELL_M = 2;
+/** Caps the running-average sample count per cell so old samples lose
+ *  weight as new ones come in (otherwise a stale value entrenched after
+ *  1000 visits would never budge). */
+const GROUND_SAMPLE_CAP = 20;
+/** Reject any ground sample whose Y is above this threshold (relative to
+ *  the AR-start camera). Holding a phone normally always puts the camera
+ *  at least ~0.5m above the floor — a "floor" reading higher than this
+ *  is impossible and almost certainly SLAM drift or the camera pointed
+ *  at the ceiling. Filtering these out keeps the cell averages sane. */
+const MAX_GROUND_SAMPLE_Y = -0.5;
 
 @Injectable({ providedIn: 'root' })
 export class ArService {
@@ -63,11 +106,11 @@ export class ArService {
   private camera!: THREE.PerspectiveCamera;
   private xrSession: XRSession | null = null;
   private fossilMeshes: Map<string, THREE.Mesh> = new Map();
-  private animationId: number = 0;
   private tapHandler?: (fossilId: string) => void;
 
-  /** Live ground height (y, in XR local space) sampled each frame via hit-test.
-   *  Null until the first hit succeeds; fallback is -DEVICE_HEIGHT_M. */
+  /** Live ground height (y, in XR/world space) sampled each frame via hit-test
+   *  in WebXR mode. In 8th Wall mode it's set once to -DEVICE_HEIGHT_M at
+   *  session start (XR8 doesn't expose hit-test in the engine-binary subset). */
   private groundY: number | null = null;
   private hitTestSource: XRHitTestSource | null = null;
 
@@ -76,24 +119,29 @@ export class ArService {
   loading = signal(false);
   error = signal<string | null>(null);
 
-  /** True when running via camera + DeviceOrientation fallback (iOS Safari).
-   *  False when using WebXR (Android Chrome). Public so the component can
-   *  skip the walk-closer distance gate (no walking possible in fallback). */
+  /** True when running via 8th Wall engine binary (iOS Safari and any
+   *  browser without WebXR immersive-ar). False when using WebXR
+   *  (Android Chrome with ARCore). Public so the component can adjust
+   *  the splash hint text. With 8th Wall the user CAN walk — SLAM tracks
+   *  player position — so the walk-closer collect gate applies in both. */
   iosFallback = signal(false);
 
   private canvasRef: HTMLCanvasElement | null = null;
-  private videoEl: HTMLVideoElement | null = null;
-  private videoStream: MediaStream | null = null;
+  private fullWindowResizeHandler: (() => void) | null = null;
+  private rendererResizeHandler: (() => void) | null = null;
 
-  /** Captured on the first orientation reading after iOS-mode AR starts.
-   *  Subsequent frames apply (referenceQuat^-1 * currentDeviceQuat) so the
-   *  camera starts looking at scene -Z (matches fossil placement) regardless
-   *  of how the iPad was tilted at session start. */
-  private referenceQuat: THREE.Quaternion | null = null;
-
-  /** Low-pass-smoothed pitch from gravity, in radians. Persists across
-   *  frames so we can blend new readings into the previous value. */
-  private smoothedPitchRad = 0;
+  /** Spatial cache of ground heights, keyed by GROUND_CELL_M cell. Built up
+   *  as the player walks — each cell stores a running average of observed
+   *  ground heights for that area. Used by placeFossil to seat newly-spawned
+   *  fossils at the right local terrain height (so a fossil that pops in on
+   *  a hill the player already visited starts at the hill's height, not the
+   *  player's current location's height). Cleared on stopAR. */
+  private groundSamples: Map<string, { avg: number; n: number }> = new Map();
+  /** Last cell key we sampled at. Prevents repeated samples within the same
+   *  cell from being added every frame — only resamples when the player
+   *  walks into a different cell, so phone wobble while standing still
+   *  doesn't drift the cell's average. */
+  private lastSampledCellKey: string | null = null;
 
   /** Camera position in XR world space, updated every frame. */
   cameraPosition = signal<{ x: number; z: number }>({ x: 0, z: 0 });
@@ -144,11 +192,6 @@ export class ArService {
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
     this.canvasRef = canvas;
-    this.renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
-    this.renderer.setPixelRatio(window.devicePixelRatio);
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.xr.enabled = true;
-    this.renderer.xr.setReferenceSpaceType('local');
 
     // Non-XR fallback: raycast using touch coords against camera
     canvas.addEventListener('touchend', (e) => {
@@ -173,11 +216,99 @@ export class ArService {
     const dirLight = new THREE.DirectionalLight(0xffd27d, 1.5);
     dirLight.position.set(1, 2, 1);
     this.scene.add(dirLight);
+
+    // WebGLRenderer: only created in WebXR mode. In iOS mode, 8th Wall owns
+    // the canvas's GL context and provides its own Three.js renderer.
+    if (!this.iosFallback()) {
+      this.renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+      this.renderer.setPixelRatio(window.devicePixelRatio);
+      this.renderer.setSize(window.innerWidth, window.innerHeight);
+      this.renderer.xr.enabled = true;
+      this.renderer.xr.setReferenceSpaceType('local');
+    }
+  }
+
+  // ── Ground-height cache ────────────────────────────────────────────────────
+
+  private groundCellKey(x: number, z: number): string {
+    return `${Math.floor(x / GROUND_CELL_M)}:${Math.floor(z / GROUND_CELL_M)}`;
+  }
+
+  /** Add a new ground-height observation at (x, z). Maintains a per-cell
+   *  running average, capped at GROUND_SAMPLE_CAP so old values lose weight. */
+  private recordSurfaceAt(x: number, z: number, y: number): void {
+    const key = this.groundCellKey(x, z);
+    const prev = this.groundSamples.get(key);
+    if (!prev) {
+      this.groundSamples.set(key, { avg: y, n: 1 });
+      return;
+    }
+    const n = Math.min(prev.n + 1, GROUND_SAMPLE_CAP);
+    const avg = (prev.avg * prev.n + y) / (prev.n + 1);
+    this.groundSamples.set(key, { avg, n });
+  }
+
+  /** Best estimate of ground height at (x, z). Null if this cell has no
+   *  observations yet — caller should fall back to live groundY. */
+  private surfaceAt(x: number, z: number): number | null {
+    const cell = this.groundSamples.get(this.groundCellKey(x, z));
+    return cell ? cell.avg : null;
+  }
+
+  /** Cell-transition ground-sample writer. Called every frame but only adds
+   *  a sample the first frame we enter a new cell. Standing still in one
+   *  cell while moving the phone up/down does NOT inject more samples, so
+   *  phone-height wobble can't drift the cell's averaged ground estimate. */
+  private maybeSampleGroundAtPlayer(x: number, z: number, y: number): void {
+    const key = this.groundCellKey(x, z);
+    if (key === this.lastSampledCellKey) return;
+    this.lastSampledCellKey = key;
+    this.recordSurfaceAt(x, z, y);
+  }
+
+  /** Shared per-fossil refinement loop used by both WebXR tick() and the
+   *  8th Wall onUpdate. Decides each fossil's display Y from (priority order):
+   *    1. state.recordedY — set once locked or while close, stable.
+   *    2. surfaceAt(fossil.x, fossil.z) — cached avg for the fossil's cell.
+   *    3. this.groundY — live estimate at the player's current position.
+   *  Also runs the close-approach hysteresis that locks recordedY after
+   *  CLOSE_APPROACHES_TO_LOCK distinct close passes. */
+  private refineFossilGrounds(camX: number, camZ: number): void {
+    this.fossilMeshes.forEach((mesh) => {
+      const g = mesh as unknown as THREE.Group;
+      const dx = g.position.x - camX;
+      const dz = g.position.z - camZ;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+
+      const cellH = this.surfaceAt(g.position.x, g.position.z);
+      const groundForThisFossil = cellH ?? this.groundY ?? 0;
+
+      const state = g.userData as FossilHeightState;
+      if (!state.locked) {
+        if (dist <= REFINE_RADIUS_M && dist < state.closestSeenDistance) {
+          state.recordedY = groundForThisFossil;
+          state.closestSeenDistance = dist;
+        }
+        if (!state.nearZone && dist <= CLOSE_APPROACH_IN_M) {
+          state.nearZone = true;
+          state.closeApproaches++;
+          if (state.closeApproaches >= CLOSE_APPROACHES_TO_LOCK) state.locked = true;
+        } else if (state.nearZone && dist > CLOSE_APPROACH_OUT_M) {
+          state.nearZone = false;
+        }
+      }
+      g.position.y = state.recordedY ?? groundForThisFossil;
+      g.scale.setScalar(Math.max(1, dist / 5));
+    });
   }
 
   async startAR(overlayRoot?: Element): Promise<void> {
+    // Snap which way the device was being held at session start. The debug
+    // panel surfaces it; downstream code can branch on it (e.g. flip pitch
+    // sign in landscape) without needing a screen-orientation listener.
+    this.orientation.captureStartOrientation();
     if (this.iosFallback()) {
-      await this.startARFallback();
+      await this.startAR8thWall();
       return;
     }
 
@@ -272,7 +403,7 @@ export class ArService {
 
   async stopAR(): Promise<void> {
     if (this.iosFallback()) {
-      this.stopFallback();
+      this.stop8thWall();
       return;
     }
     if (this.xrSession) {
@@ -281,180 +412,247 @@ export class ArService {
     if (this.renderer) this.renderer.setAnimationLoop(null);
   }
 
-  /** iOS Safari path: camera feed as background, Three.js canvas transparent
-   *  on top, camera rotation driven by DeviceOrientationEvent. No SLAM, no
-   *  hit-test — player is stationary at origin and rotates to look around. */
-  private async startARFallback(): Promise<void> {
+  /** iOS Safari path: 8th Wall engine binary (free, no app key). Provides
+   *  real SLAM/6DoF tracking via the XR8 global loaded from a CDN script tag
+   *  in index.html. We hand it our canvas; it takes over the GL context,
+   *  renders camera passthrough, and tracks the device through world space.
+   *
+   *  Our existing scene/camera/renderer (set up in init for the WebXR path)
+   *  are swapped to XR8's instances in onStart. Lights and any pre-placed
+   *  fossils are moved over to the new scene. From that point on,
+   *  `this.scene`/`this.camera`/`this.renderer` all refer to XR8's objects,
+   *  so the existing placeFossil/syncARMarkers/grid logic works unchanged. */
+  private async startAR8thWall(): Promise<void> {
     this.error.set(null);
     this.loading.set(true);
     try {
-      this.videoStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' } },
-        audio: false,
-      });
+      // 8th Wall's Threejs pipeline module reads window.THREE to bind itself.
+      // We import Three.js as an ES module, which never sets the global, so
+      // expose it manually before XR8 boots.
+      (window as unknown as { THREE: typeof THREE }).THREE = THREE;
+      const XR8 = await this.waitForXR8();
+      if (!this.canvasRef) throw new Error('AR canvas not initialized');
 
-      if (!this.videoEl) {
-        const video = document.createElement('video');
-        video.playsInline = true;
-        video.muted = true;
-        video.autoplay = true;
-        video.setAttribute('playsinline', 'true');
-        video.setAttribute('webkit-playsinline', 'true');
-        Object.assign(video.style, {
-          position: 'fixed', inset: '0', width: '100%', height: '100%',
-          objectFit: 'cover', zIndex: '0',
-        });
-        // Insert video immediately before the canvas so canvas layers on top.
-        const parent = this.canvasRef?.parentElement ?? document.body;
-        parent.insertBefore(video, this.canvasRef ?? null);
-        this.videoEl = video;
-      }
-      this.videoEl.style.display = 'block';
-      this.videoEl.srcObject = this.videoStream;
-      await this.videoEl.play();
+      const ngZone = this.ngZone;
+      const service = this;
 
-      if (this.canvasRef) this.canvasRef.style.zIndex = '1';
-      this.renderer.setClearColor(0x000000, 0);
+      // Dispatched repeatedly during the first ~2s of an AR session and
+       // from our pipeline module's onStart, so XR8 picks up the current
+       // screen.orientation.angle reliably regardless of when its handler
+       // becomes ready. Empirically a single dispatch sometimes lands before
+       // XR8's listener is installed and the scene comes up rotated 90°.
+      const pushOrientation = () => {
+        try { window.dispatchEvent(new Event('orientationchange')); } catch { /* ignore */ }
+        try { window.dispatchEvent(new Event('resize')); } catch { /* ignore */ }
+      };
 
-      // Eye at human height; ground at y=0. Matches WebXR's local ref space,
-      // so fossils (y=0) and grid (y=0.02) sit naturally below the horizon
-      // when the user holds the iPad upright (pitch≈0).
-      this.camera.position.set(0, DEVICE_HEIGHT_M, 0);
-      this.camera.rotation.set(0, 0, 0);
-      this.referenceQuat = null;  // re-capture on next valid frame
-      this.smoothedPitchRad = 0;
+      const syncRendererSize = () => {
+        if (!service.renderer || !service.camera) return;
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        const dpr = window.devicePixelRatio || 1;
+        service.renderer.setPixelRatio(dpr);
+        service.renderer.setSize(w, h, false);  // false = don't restyle the canvas (we manage that)
+        service.camera.aspect = w / h;
+        service.camera.updateProjectionMatrix();
+      };
 
-      // Debug test marker — bright red sphere 3m in front of camera at
-      // ground level. If the user can see this but not the GPS-based
-      // fossils, the issue is fossil placement direction, not rendering.
-      const testGeo = new THREE.SphereGeometry(0.4, 16, 16);
-      const testMat = new THREE.MeshStandardMaterial({
-        color: 0xff2040, emissive: 0xff2040, emissiveIntensity: 0.6,
-      });
-      const testMesh = new THREE.Mesh(testGeo, testMat);
-      testMesh.position.set(0, 0.4, -3);
-      testMesh.userData['testMarker'] = true;
-      this.scene.add(testMesh);
+      const appPipelineModule = {
+        name: 'archeo-app',
+        onStart: () => {
+          const xrScene = XR8.Threejs.xrScene();
 
+          // Carry lights + any already-placed fossils into XR8's scene.
+          const carryOver: THREE.Object3D[] = [];
+          service.scene.children
+            .filter(c => c.type === 'AmbientLight' || c.type === 'DirectionalLight')
+            .forEach(l => carryOver.push(l));
+          service.fossilMeshes.forEach(m => carryOver.push(m as unknown as THREE.Object3D));
+          carryOver.forEach(o => xrScene.scene.add(o));
+
+          service.scene = xrScene.scene;
+          service.camera = xrScene.camera;
+          service.renderer = xrScene.renderer;
+
+          // Three.js renderer was created from the canvas at XR8 boot, which
+          // can be at default 300×150 or the video resolution rather than the
+          // window size. Resize it now (after Threejs.pipelineModule.onStart)
+          // so the 3D overlay fills the same area as the camera feed.
+          syncRendererSize();
+          window.addEventListener('resize', syncRendererSize);
+          window.addEventListener('orientationchange', syncRendererSize);
+          service.rendererResizeHandler = syncRendererSize;
+
+          // XR8 starts the camera at the device's pose at session start.
+          // Treat that pose as eye height; ground sits DEVICE_HEIGHT_M below.
+          // The existing placeFossil/tick logic reads groundY to seat fossils.
+          service.groundY = -DEVICE_HEIGHT_M;
+          ngZone.run(() => service.groundYSignal.set(service.groundY));
+
+          // Force XR8 to recheck screen orientation now that all pipeline
+          // modules are attached. The single dispatch after XR8.run sometimes
+          // fires too early — XR8 hasn't installed its handler yet. Firing
+          // from onStart guarantees the handler exists.
+          setTimeout(pushOrientation, 50);
+          setTimeout(pushOrientation, 500);
+          setTimeout(pushOrientation, 1500);
+        },
+        onUpdate: () => {
+          const cam = service.camera;
+          const camX = cam.position.x;
+          const camY = cam.position.y;
+          const camZ = cam.position.z;
+
+          // Raw camera-derived ground estimate. Naive use of this as the live
+          // groundY makes the whole scene follow phone-vertical motion (lift
+          // the iPad → fossils + grid rise with it). To decouple phone-height
+          // wobble from real elevation, we feed rawGroundY into the spatial
+          // cache and read back the player's CURRENT cell average as groundY.
+          // Over many samples in a cell, phone-height variation averages out;
+          // walking into a new cell with a different average picks up the
+          // real elevation change.
+          const rawGroundY = camY - DEVICE_HEIGHT_M;
+          // Only sample when the phone is held in a normal forward-viewing
+          // pose (gravity-derived pitch within ±35° of horizontal). Tilting
+          // up to point at a wall/ceiling or down to point at the floor
+          // gives misleading samples — the user's intent is "look at this
+          // surface", not "this surface is the ground". Filter those out.
+          const phonePitch = service.orientation.gravityPitchDeg();
+          const phoneIsLevel = phonePitch !== null && Math.abs(phonePitch) < 35;
+          // Also reject impossibly-high ground readings — the floor can't be
+          // above the camera-held-at-chest. Catches SLAM drift before it
+          // contaminates the cell averages.
+          if (phoneIsLevel && rawGroundY < MAX_GROUND_SAMPLE_Y) {
+            service.maybeSampleGroundAtPlayer(camX, camZ, rawGroundY);
+          }
+          const cellAvg = service.surfaceAt(camX, camZ);
+          service.groundY = cellAvg ?? rawGroundY;
+          ngZone.run(() => service.groundYSignal.set(service.groundY));
+
+          // Per-fossil refinement: each fossil's display Y comes from its
+          // own cell's avg or its locked recordedY — independent of player
+          // motion or phone height once samples have accumulated.
+          service.refineFossilGrounds(camX, camZ);
+
+          // Push debug + camera position at ~4×/sec so signals don't thrash.
+          const now = performance.now();
+          if (now - service.debugLastFlush > 250) {
+            service.debugLastFlush = now;
+            const o = service.orientation.orientation();
+            // Use the orientation-independent gravity-derived pitch (works in
+            // landscape on iPad) instead of the portrait-only beta-90 value.
+            const gravPitch = service.orientation.gravityPitchDeg();
+            const fc = service.fossilMeshes.size;
+            ngZone.run(() => {
+              service.cameraPosition.set({ x: camX, z: camZ });
+              service.iosDebug.set({
+                heading: o?.heading ?? -1,
+                pitch: gravPitch ?? -1,
+                ref: service.orientation.headingReference() ?? 0,
+                yaw: 0,
+                camPitch: 0,
+                fossilCount: fc, camX, camY, camZ,
+              });
+            });
+          }
+        },
+        onException: (err: unknown) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          ngZone.run(() => service.error.set(`8th Wall error: ${msg}`));
+        },
+      };
+
+      // Size the canvas to fill the window BEFORE XR8.run reads its dimensions.
+      // Three.js's pipeline module captures canvas.width/height during onStart
+      // to set the camera's aspect ratio — if the canvas is still at its DOM
+      // default size (300×150) at that moment, the rendered scene comes out
+      // badly distorted ("vertical"-looking) even after a later resize.
+      const canvas = this.canvasRef;
+      const resizeCanvas = () => {
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width  = Math.round(window.innerWidth  * dpr);
+        canvas.height = Math.round(window.innerHeight * dpr);
+        canvas.style.width  = window.innerWidth  + 'px';
+        canvas.style.height = window.innerHeight + 'px';
+      };
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+      window.addEventListener('orientationchange', resizeCanvas);
+      this.fullWindowResizeHandler = resizeCanvas;
+
+      // 'absolute' keeps 1 unit = 1 meter, matching our GPS-bearing-to-XR math.
+      // 'responsive' (default) auto-scales the world to fit visible content,
+      // which warps long-distance placements like ours.
+      XR8.XrController.configure({ disableWorldTracking: false, scale: 'absolute' });
+      XR8.addCameraPipelineModules([
+        XR8.GlTextureRenderer.pipelineModule(),
+        XR8.Threejs.pipelineModule(),
+        XR8.XrController.pipelineModule(),
+        appPipelineModule,
+      ]);
+
+      XR8.run({ canvas: this.canvasRef });
+      // Additional orientation pushes happen from inside appPipelineModule's
+      // onStart (above) — fired AFTER all modules attach, which is the
+      // reliable moment for XR8 to pick it up.
       this.active.set(true);
-
-      this.ngZone.runOutsideAngular(() => {
-        const tick = () => {
-          if (!this.active() || !this.iosFallback()) return;
-          this.tickFallback();
-          this.animationId = requestAnimationFrame(tick);
-        };
-        this.animationId = requestAnimationFrame(tick);
-      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      this.error.set(`Camera/AR failed: ${msg}`);
-      this.stopFallback();
+      this.error.set(`8th Wall AR failed: ${msg}`);
     } finally {
       this.loading.set(false);
     }
   }
 
-  private stopFallback(): void {
-    if (this.animationId) {
-      cancelAnimationFrame(this.animationId);
-      this.animationId = 0;
-    }
-    if (this.videoStream) {
-      this.videoStream.getTracks().forEach(t => t.stop());
-      this.videoStream = null;
-    }
-    if (this.videoEl) {
-      this.videoEl.srcObject = null;
-      this.videoEl.style.display = 'none';
-    }
-    // Remove the debug test marker if present
-    const marker = this.scene?.children.find(o => (o as THREE.Mesh).userData?.['testMarker']);
-    if (marker) {
-      this.scene.remove(marker);
-      const m = marker as THREE.Mesh;
-      if (m.geometry) m.geometry.dispose();
-      const mat = m.material as THREE.Material | THREE.Material[];
-      if (Array.isArray(mat)) mat.forEach(x => x.dispose());
-      else if (mat) mat.dispose();
-    }
-    this.active.set(false);
-    this.camera.rotation.set(0, 0, 0);
+  /** Poll up to 10s for the async <script> tag in index.html to define window.XR8. */
+  private async waitForXR8(): Promise<Xr8Global> {
+    const w = window as unknown as { XR8?: Xr8Global };
+    if (w.XR8?.run) return w.XR8;
+    return new Promise<Xr8Global>((resolve, reject) => {
+      const start = Date.now();
+      const check = () => {
+        if (w.XR8?.run) return resolve(w.XR8!);
+        if (Date.now() - start > 10000) {
+          return reject(new Error('XR8 script failed to load within 10s — check that the script tag in index.html loaded'));
+        }
+        setTimeout(check, 50);
+      };
+      check();
+    });
   }
 
-  private tickFallback(): void {
-    const o = this.orientation.orientation();
-    const raw = this.orientation.rawOrientation();
-    let yaw = 0, ref = 0;
-    let deviceHeading = -1, devicePitch = -1;
-    if (o) {
-      // Lazy-capture the heading reference on the first frame we have a
-      // valid orientation reading. The poll in ar-view.onStartAR tries for
-      // 3s but iOS sometimes only delivers events after a slow permission
-      // dialog — without this safety net, ref defaults to current heading
-      // every frame and delta is always 0 (scene glued to camera).
-      if (this.orientation.headingReference() === null) {
-        this.orientation.captureHeadingReference();
-      }
-      ref = this.orientation.headingReference() ?? o.heading;
-      let delta = o.heading - ref;
-      if (delta > 180) delta -= 360;
-      if (delta < -180) delta += 360;
-      yaw = -(delta * Math.PI) / 180;
-      if (!isFinite(yaw)) yaw = 0;
-      deviceHeading = o.heading;
-      devicePitch = o.pitch;
+  /** Force XR8 to re-anchor the world frame at the current camera pose.
+   *  Useful when SLAM has drifted or snapped to a bad orientation — instead
+   *  of restarting AR entirely, the user can tap a button to recover. Also
+   *  clears the spatial ground cache since old samples are in the (now-
+   *  invalid) old world frame. */
+  recenter8thWall(): void {
+    const XR8 = (window as unknown as { XR8?: Xr8Global }).XR8;
+    if (XR8?.XrController?.recenter) XR8.XrController.recenter();
+    this.groundSamples.clear();
+    this.lastSampledCellKey = null;
+    this.groundY = -DEVICE_HEIGHT_M;
+    this.ngZone.run(() => this.groundYSignal.set(this.groundY));
+  }
+
+  private stop8thWall(): void {
+    const XR8 = (window as unknown as { XR8?: Xr8Global }).XR8;
+    if (XR8?.stop) XR8.stop();
+    if (XR8?.clearCameraPipelineModules) XR8.clearCameraPipelineModules();
+    if (this.fullWindowResizeHandler) {
+      window.removeEventListener('resize', this.fullWindowResizeHandler);
+      window.removeEventListener('orientationchange', this.fullWindowResizeHandler);
+      this.fullWindowResizeHandler = null;
     }
-
-    // Pitch from gravity (DeviceMotion). Orientation-independent: in any
-    // device pose, asin(gz / |g|) gives the angle between the device's
-    // back-camera axis and horizontal. Negative = camera looking down.
-    const g = this.orientation.gravity();
-    let pitchRad = this.smoothedPitchRad;
-    if (g) {
-      const mag = Math.sqrt(g.x * g.x + g.y * g.y + g.z * g.z);
-      if (mag > 0.1) {
-        const raw = Math.asin(Math.max(-1, Math.min(1, g.z / mag)));
-        // Low-pass filter to kill accelerometer jitter.
-        pitchRad = 0.85 * this.smoothedPitchRad + 0.15 * raw;
-        if (!isFinite(pitchRad)) pitchRad = 0;
-        // Safety clamp: ±70° so a bad reading can't put the camera in the
-        // floor or sky.
-        const limit = (70 * Math.PI) / 180;
-        pitchRad = Math.max(-limit, Math.min(limit, pitchRad));
-        this.smoothedPitchRad = pitchRad;
-      }
+    if (this.rendererResizeHandler) {
+      window.removeEventListener('resize', this.rendererResizeHandler);
+      window.removeEventListener('orientationchange', this.rendererResizeHandler);
+      this.rendererResizeHandler = null;
     }
-
-    this.camera.rotation.order = 'YXZ';
-    this.camera.rotation.set(pitchRad, yaw, 0);
-
-    // Push debug values at most 4×/sec to avoid signal-update thrash.
-    const now = performance.now();
-    if (now - this.debugLastFlush > 250) {
-      this.debugLastFlush = now;
-      const cx = this.camera.position.x;
-      const cy = this.camera.position.y;
-      const cz = this.camera.position.z;
-      const fc = this.fossilMeshes.size;
-      this.ngZone.run(() => this.iosDebug.set({
-        heading: deviceHeading, pitch: devicePitch, ref, yaw,
-        camPitch: this.smoothedPitchRad,
-        fossilCount: fc, camX: cx, camY: cy, camZ: cz,
-      }));
-    }
-
-    // Fallback has no hit-test — fossils stay at the Y set in placeFossil.
-    // Still scale by distance so distant ones stay readable.
-    this.fossilMeshes.forEach((mesh) => {
-      const g = mesh as unknown as THREE.Group;
-      const dx = g.position.x - this.camera.position.x;
-      const dz = g.position.z - this.camera.position.z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
-      g.scale.setScalar(Math.max(1, dist / 5));
-    });
-
-    this.renderer.render(this.scene, this.camera);
+    this.active.set(false);
+    this.groundY = null;
+    this.groundSamples.clear();
+    this.lastSampledCellKey = null;
   }
 
   placeFossil(id: string, position: THREE.Vector3, shiny = false): void {
@@ -482,9 +680,12 @@ export class ArService {
     // Position is an origin-relative world-space offset (anchored to the GPS
     // origin captured at AR session start). Place directly — do NOT add the
     // camera position, or fossils drift as the player walks.
-    // Both modes: ground is y=0. WebXR refines with live hit-test; fallback
-    // stays at 0 because there is no hit-test.
-    const y = this.groundY ?? 0;
+    // Y preference: cached cell height for fossil's location (set if player
+    // has already walked through here), else the live ground estimate. This
+    // makes a fossil spawning on a hill the player already visited start
+    // at the hill's height, not the player's current location's height.
+    const cellH = this.surfaceAt(position.x, position.z);
+    const y = cellH ?? this.groundY ?? 0;
     group.position.set(position.x, y, position.z);
     const heightState: FossilHeightState = {
       recordedY: null,
@@ -657,7 +858,7 @@ export class ArService {
 
             if (isFlat && inRange) {
               // Low-pass filter: 80% previous, 20% new. First accepted hit
-              // initialises the value directly.
+              // initializes the value directly.
               const firstHit = this.groundY === null;
               this.groundY = firstHit
                 ? hitY
@@ -679,45 +880,18 @@ export class ArService {
     // so precisePosition stays up to date as the player walks.
     this.flushDebug(false);
 
-    // Keep all fossils seated on the ground. In WebXR local space the floor
-    // is at y≈0; we refine with hit-test when available.
+    // Feed the live hit-test result into the spatial cache at the player's
+    // current cell, then run shared per-fossil refinement (same logic 8th Wall
+    // mode uses, just with WebXR's hit-test as the ground source instead of
+    // camera.y - DEVICE_HEIGHT_M).
+    const camX = this.camera.position.x;
+    const camZ = this.camera.position.z;
+    if (this.groundY !== null) {
+      this.maybeSampleGroundAtPlayer(camX, camZ, this.groundY);
+    }
+    this.refineFossilGrounds(camX, camZ);
+
     const currentGround = this.groundY ?? 0;
-
-    this.fossilMeshes.forEach((mesh) => {
-      const g = mesh as unknown as THREE.Group;
-      const dx = g.position.x - this.camera.position.x;
-      const dz = g.position.z - this.camera.position.z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
-
-      // Per-fossil ground-Y refinement. The fossil's recorded Y is updated
-      // only from progressively closer observations, and is frozen after two
-      // distinct close approaches. Fossils with no observation yet fall back
-      // to the live global groundY (old behaviour).
-      const state = g.userData as FossilHeightState;
-      if (!state.locked) {
-        if (dist <= REFINE_RADIUS_M && dist < state.closestSeenDistance) {
-          state.recordedY = currentGround;
-          state.closestSeenDistance = dist;
-        }
-        // Close-approach counter with 1.5 m enter / 1.7 m exit hysteresis.
-        if (!state.nearZone && dist <= CLOSE_APPROACH_IN_M) {
-          state.nearZone = true;
-          state.closeApproaches++;
-          if (state.closeApproaches >= CLOSE_APPROACHES_TO_LOCK) {
-            state.locked = true;
-          }
-        } else if (state.nearZone && dist > CLOSE_APPROACH_OUT_M) {
-          state.nearZone = false;
-        }
-      }
-      g.position.y = state.recordedY ?? currentGround;
-
-      // Scale with distance so a 0.08 m sphere stays readable past 5 m.
-      // At the 5 m collection radius it's normal-sized; at 30 m it's ~6×.
-      g.scale.setScalar(Math.max(1, dist / 5));
-    });
-
-    // Keep the grid overlay flush with the live ground (lifted slightly to avoid z-fighting).
     if (this.gridMesh) this.gridMesh.position.y = currentGround + 0.02;
     this.renderer.render(this.scene, this.camera);
   }

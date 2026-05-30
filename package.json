@@ -1,6 +1,6 @@
 {
   "name": "ar-archeo-game",
-  "version": "4.0.19-ios",
+  "version": "4.4.0-iphone-8thwall",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
