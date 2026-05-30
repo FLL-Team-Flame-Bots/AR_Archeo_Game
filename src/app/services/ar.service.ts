@@ -621,20 +621,6 @@ export class ArService {
     });
   }
 
-  /** Force XR8 to re-anchor the world frame at the current camera pose.
-   *  Useful when SLAM has drifted or snapped to a bad orientation — instead
-   *  of restarting AR entirely, the user can tap a button to recover. Also
-   *  clears the spatial ground cache since old samples are in the (now-
-   *  invalid) old world frame. */
-  recenter8thWall(): void {
-    const XR8 = (window as unknown as { XR8?: Xr8Global }).XR8;
-    if (XR8?.XrController?.recenter) XR8.XrController.recenter();
-    this.groundSamples.clear();
-    this.lastSampledCellKey = null;
-    this.groundY = -DEVICE_HEIGHT_M;
-    this.ngZone.run(() => this.groundYSignal.set(this.groundY));
-  }
-
   private stop8thWall(): void {
     const XR8 = (window as unknown as { XR8?: Xr8Global }).XR8;
     if (XR8?.stop) XR8.stop();
@@ -723,47 +709,6 @@ export class ArService {
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(ndc, this.camera);
     this.checkFossilHit(raycaster.ray.origin, raycaster.ray.direction);
-  }
-
-  private gridMesh: THREE.LineSegments | null = null;
-
-  /** Draws a wireframe overlay of grid cells on the ground.
-   *  `segments` is a flat list of (start,end) pairs in camera-relative XZ.
-   *  Y is taken from the live ground hit-test, with a small lift so lines
-   *  don't z-fight with the real floor. */
-  placeGrid(segments: { x1: number; z1: number; x2: number; z2: number }[]): void {
-    if (this.gridMesh) {
-      this.scene.remove(this.gridMesh);
-      this.gridMesh.geometry.dispose();
-      (this.gridMesh.material as THREE.Material).dispose();
-    }
-    if (segments.length === 0) {
-      this.gridMesh = null;
-      return;
-    }
-    const cx = this.camera.position.x;
-    const cz = this.camera.position.z;
-    const positions = new Float32Array(segments.length * 6);
-    segments.forEach((s, i) => {
-      positions[i * 6 + 0] = cx + s.x1;
-      positions[i * 6 + 1] = 0;
-      positions[i * 6 + 2] = cz + s.z1;
-      positions[i * 6 + 3] = cx + s.x2;
-      positions[i * 6 + 4] = 0;
-      positions[i * 6 + 5] = cz + s.z2;
-    });
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    const mat = new THREE.LineBasicMaterial({
-      color: 0xffd700, transparent: true, opacity: 0.55,
-    });
-    this.gridMesh = new THREE.LineSegments(geo, mat);
-    this.gridMesh.position.y = (this.groundY ?? 0) + 0.02;
-    this.scene.add(this.gridMesh);
-  }
-
-  clearGrid(): void {
-    this.placeGrid([]);
   }
 
   removeFossil(id: string): void {
@@ -891,8 +836,6 @@ export class ArService {
     }
     this.refineFossilGrounds(camX, camZ);
 
-    const currentGround = this.groundY ?? 0;
-    if (this.gridMesh) this.gridMesh.position.y = currentGround + 0.02;
     this.renderer.render(this.scene, this.camera);
   }
 }

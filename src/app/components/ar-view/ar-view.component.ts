@@ -76,16 +76,19 @@ const SHINY_CHANCE = 0.01;
           </button>
 
           <p class="hint" *ngIf="!arService.supported()">
-            ⚠️ AR not detected — please open this page on an iPhone in Safari.
+            ⚠️ AR not detected — open this page in Chrome on Android or Safari on iPhone.
           </p>
           <p class="hint ios" *ngIf="arService.supported() && arService.iosFallback()">
             Walk around your iPhone to find fossils. Tap one to collect.
             <br><br>
             (The environment may take a few seconds to load in after starting AR.)
           </p>
+          <p class="hint android" *ngIf="arService.supported() && !arService.iosFallback()">
+            Walk around with your phone to find fossils. Tap one to collect.
+          </p>
           <p class="hint error" *ngIf="arService.error()">{{ arService.error() }}</p>
 
-          <div class="splash-version">v4.4.0-iphone-8thwall</div>
+          <div class="splash-version">v4.5.1-{{ arService.iosFallback() ? 'iphone-8thwall' : 'android-webxr' }}</div>
         </div>
       </div>
 
@@ -117,11 +120,11 @@ const SHINY_CHANCE = 0.01;
           [fossilDirections]="fossilDirections()"
           [hasChroma]="hasChroma()"
           [hasShinyChroma]="hasShinyChroma()"
+          [iosFallback]="arService.iosFallback()"
           (startAR)="onStartAR()"
-          (openMap)="showMap = true"
           (openCollection)="showCollection.set(true)"
           (openLeaderboard)="showLeaderboard.set(true)"
-          (openLearn)="showLearn = true"
+          (openHelp)="showHelp.set(true)"
         />
 
         <!-- GPS error toast -->
@@ -144,18 +147,95 @@ const SHINY_CHANCE = 0.01;
             <div class="celebration-points">+{{ pointsFor(f) }} points</div>
           </div>
         </div>
+
+        <!-- Interactive modals MUST be descendants of .ar-overlay so they
+             render during a WebXR immersive-ar session on Android. The
+             compositor only displays elements within the dom-overlay root;
+             anything outside it is invisible to the user once AR starts. -->
+
+        <!-- Leaderboard modal -->
+        <app-leaderboard
+          *ngIf="showLeaderboard()"
+          (close)="showLeaderboard.set(false)"
+        />
+
+        <!-- Help / About modal -->
+      <div class="overlay-backdrop" *ngIf="showHelp()" (click)="showHelp.set(false)">
+        <div class="help-panel" (click)="$event.stopPropagation()">
+          <div class="help-header">
+            <div class="help-title">About</div>
+            <button class="close-btn" (click)="showHelp.set(false)">✕</button>
+          </div>
+          <div class="help-body">
+
+            <!-- Team -->
+            <div class="help-section">
+              <div class="team-row">
+                <img class="team-logo" src="flamebots-logo.png" alt="Flame Bots logo" />
+                <div class="team-meta">
+                  <div class="team-name">Developed by Flame Bots</div>
+                  <div class="team-sub">FLL Team 67092</div>
+                </div>
+              </div>
+              <div class="contact-row">
+                <div>📧 <a href="mailto:contact@flamebots.org">contact@flamebots.org</a></div>
+                <div>🌐 <a href="https://flamebots.org" target="_blank" rel="noopener">flamebots.org</a></div>
+              </div>
+            </div>
+
+            <!-- Release notes -->
+            <div class="help-section">
+              <div class="help-section-title">Release notes</div>
+              <ul class="release-list">
+                <li><b>v4.4.0</b> — Help/about page, iPhone-focused help text, removed dev debug bar, "loading environment" pill.</li>
+                <li><b>v4.3.x</b> — Portrait-orientation lock, gravity-derived pitch, ground-sample sanity filter (Y &lt; −0.5 m), wall/ceiling rejection via phone-pitch gate.</li>
+                <li><b>v4.2.x</b> — Spatial ground-height cache (per-cell averaged) so the floor stops following the camera; per-fossil height locking after two close approaches; radar arrow flipped 180° to match the back camera; reset-spawns + recenter tools.</li>
+                <li><b>v4.1.0</b> — Switched iPhone AR from DeviceOrientation-only to the free 8th Wall SLAM engine — real world tracking, walk through fossils.</li>
+                <li><b>v4.0.x</b> — Initial iPhone fallback (camera + compass); American-English spelling cleanup.</li>
+                <li><b>v3.x</b> — XR-derived player position; per-fossil ground-height refinement on Android Chrome.</li>
+                <li><b>v2.x</b> — GPS-cell-based fossil spawning; epic/legendary rarities; celebration overlays.</li>
+                <li><b>v1.x</b> — First playable: GPS scavenger hunt with WebXR on Android Chrome.</li>
+              </ul>
+            </div>
+
+            <!-- Levels -->
+            <div class="help-section">
+              <div class="help-section-title">Levels</div>
+              <div class="level-help-list">
+                <div class="level-help-row"
+                     *ngFor="let lv of helpLevels"
+                     [class]="'level-' + lv.key"
+                     [class.is-current]="lv.current"
+                     [class.is-secret]="lv.key === 'secret'">
+                  <div class="level-help-name">{{ lv.name }}</div>
+                  <div class="level-help-req">{{ lv.req }}</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Fossils list -->
+            <div class="help-section">
+              <div class="help-section-title">All fossils ({{ fossilTemplates.length }})</div>
+              <div class="fossil-help-list">
+                <div class="fossil-help-row"
+                     *ngFor="let f of helpFossils"
+                     [class]="'rarity-' + f.rarity"
+                     [class.is-mystery]="f.mystery">
+                  <span class="fossil-help-emoji"
+                        [class.silhouette]="f.mystery">{{ f.emoji }}</span>
+                  <div class="fossil-help-meta">
+                    <div class="fossil-help-name">
+                      {{ f.mystery ? '???' : f.name }}
+                    </div>
+                    <div class="fossil-help-rarity">{{ f.rarity }} · {{ f.points }} pt</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
       </div>
-
-      <!-- Interactive modals are siblings of .ar-overlay, NOT children, because
-           iOS Safari unreliably routes pointer/input events through a
-           pointer-events: none ancestor. Keeping them at the .ar-container
-           level gives them a clean event path. -->
-
-      <!-- Leaderboard modal -->
-      <app-leaderboard
-        *ngIf="showLeaderboard()"
-        (close)="showLeaderboard.set(false)"
-      />
 
       <!-- Fossil card popup -->
       <div class="overlay-backdrop" *ngIf="selectedFossil()" (click)="selectedFossil.set(null)">
@@ -196,6 +276,15 @@ const SHINY_CHANCE = 0.01;
         </div>
       </div>
 
+        <!-- In-AR "loading environment" message — auto-hides ~5s after AR starts.
+             Kept inside .ar-overlay so it's visible during a WebXR immersive-ar
+             session on Android (only dom-overlay descendants render then). -->
+        <div class="env-loading" *ngIf="arService.active() && environmentLoading()">
+          Loading environment…
+        </div>
+
+      </div><!-- /.ar-overlay -->
+
       <!-- Orientation lock: 8th Wall tracks correctly in upright portrait,
            which is angle 0 on phones (natural portrait) or angle 270 on
            iPads with landscape-natural orientation. Show this overlay in
@@ -208,9 +297,9 @@ const SHINY_CHANCE = 0.01;
           <div class="rotate-icon">🔄</div>
           <div class="rotate-title">Rotate to portrait</div>
           <div class="rotate-sub">
-            Hold your iPhone upright in <b>portrait</b> mode.
+            Hold your phone upright in <b>portrait</b> mode.
             <br><br>
-            (AR tracking only works when the iPhone is held vertical.)
+            (AR tracking only works when the phone is held vertical.)
           </div>
         </div>
       </div>
@@ -220,11 +309,6 @@ const SHINY_CHANCE = 0.01;
          href="https://8thwall.org" target="_blank" rel="noopener">
         Powered by 8th Wall
       </a>
-
-      <!-- In-AR "loading environment" message — auto-hides ~5s after AR starts. -->
-      <div class="env-loading" *ngIf="arService.active() && environmentLoading()">
-        Loading environment…
-      </div>
 
     </div>
   `,
@@ -460,6 +544,112 @@ const SHINY_CHANCE = 0.01;
     .rotate-title { font-size: 22px; font-weight: 700; color: #ffd700; margin-bottom: 8px; }
     .rotate-sub { font-size: 13px; color: rgba(245,230,200,0.75); line-height: 1.4; }
 
+    /* Help / About modal */
+    .help-panel {
+      background: linear-gradient(145deg, #2a1a00, #3d2a00);
+      border: 2px solid #8B6914; border-radius: 16px;
+      color: #f5e6c8; max-width: 420px; width: 92vw;
+      max-height: 85vh; display: flex; flex-direction: column;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+    }
+    .help-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 14px 18px; border-bottom: 1px solid rgba(139,105,20,0.4);
+    }
+    .help-title { font-size: 18px; font-weight: 700; color: #ffd700; }
+    .help-body { padding: 16px 18px 20px; overflow-y: auto; }
+    .help-section { margin-bottom: 20px; }
+    .help-section:last-child { margin-bottom: 0; }
+    .help-section-title {
+      font-size: 12px; text-transform: uppercase; letter-spacing: 1px;
+      color: #c8a86b; margin-bottom: 8px; border-bottom: 1px solid rgba(139,105,20,0.3);
+      padding-bottom: 4px;
+    }
+    .team-row {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 10px;
+    }
+    .team-logo {
+      width: 60px; height: 60px; object-fit: contain;
+      filter: drop-shadow(0 0 6px rgba(255,80,40,0.35));
+    }
+    .team-name { font-size: 16px; font-weight: 700; color: #ffd700; }
+    .team-sub { font-size: 12px; color: rgba(245,230,200,0.7); }
+    .contact-row { font-size: 13px; line-height: 1.7; }
+    .contact-row a { color: #facc15; text-decoration: none; }
+    .contact-row a:hover { text-decoration: underline; }
+
+    .release-list {
+      list-style: none; padding: 0; margin: 0;
+      font-size: 12px; line-height: 1.5; color: rgba(245,230,200,0.85);
+    }
+    .release-list li { padding: 4px 0; border-bottom: 1px dashed rgba(139,105,20,0.25); }
+    .release-list li:last-child { border-bottom: none; }
+    .release-list b { color: #ffd700; }
+
+    .level-help-list { display: flex; flex-direction: column; gap: 4px; }
+    .level-help-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 6px 12px; border-radius: 8px;
+      background: rgba(0,0,0,0.25); border-left: 3px solid #6b7280;
+    }
+    .level-help-row.level-apprentice  { border-left-color: #94a3b8; }
+    .level-help-row.level-explorer    { border-left-color: #4ade80; }
+    .level-help-row.level-specialist  { border-left-color: #38bdf8; }
+    .level-help-row.level-expert      { border-left-color: #a855f7; }
+    .level-help-row.level-master      { border-left-color: #f43f5e; }
+    .level-help-row.level-scholar     { border-left-color: #ffd700; }
+    .level-help-row.level-chromaturge {
+      border-left: 3px solid transparent;
+      background:
+        rgba(0,0,0,0.4) padding-box,
+        linear-gradient(90deg, #ff0040, #ffe000, #00e060, #00c0ff, #ff00d0) border-box;
+    }
+    .level-help-row.level-starborn {
+      border-left-color: #ffe080;
+      background: linear-gradient(90deg, rgba(255,224,128,0.15), rgba(255,255,255,0.04));
+    }
+    .level-help-row.is-secret { opacity: 0.55; font-style: italic; }
+    .level-help-row.is-current {
+      box-shadow: inset 0 0 0 1px rgba(255,215,0,0.5);
+      background: rgba(255,215,0,0.12);
+    }
+    .level-help-name { font-size: 13px; font-weight: 600; }
+    .level-help-req  { font-size: 11px; color: #c8a86b; }
+
+    .fossil-help-list {
+      display: grid; grid-template-columns: 1fr; gap: 4px;
+    }
+    .fossil-help-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 6px 10px; border-radius: 8px;
+      background: rgba(0,0,0,0.25); border-left: 3px solid #6b7280;
+    }
+    .fossil-help-row.rarity-rare      { border-left-color: #a855f7; }
+    .fossil-help-row.rarity-epic      { border-left-color: #f43f5e; background: rgba(244,63,94,0.08); }
+    .fossil-help-row.rarity-legendary { border-left-color: #ffd700; background: rgba(255,215,0,0.08); }
+    .fossil-help-row.rarity-chroma {
+      border-left: 3px solid transparent;
+      background:
+        rgba(0,0,0,0.4) padding-box,
+        linear-gradient(90deg, #ff0040, #ffe000, #00e060, #00c0ff, #ff00d0) border-box;
+    }
+    .fossil-help-emoji { font-size: 22px; min-width: 30px; text-align: center; }
+    /* Mystery silhouette — used for unrevealed chromas. brightness(0) makes
+       the colored emoji a flat black silhouette; the low opacity hints at
+       "something is hidden here" without revealing identity. */
+    .fossil-help-emoji.silhouette { filter: brightness(0); opacity: 0.35; }
+    .fossil-help-meta { flex: 1; min-width: 0; }
+    .fossil-help-name {
+      font-size: 13px; font-weight: 600;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .fossil-help-row.is-mystery .fossil-help-name {
+      letter-spacing: 4px; color: rgba(245,230,200,0.5);
+    }
+    .fossil-help-rarity {
+      font-size: 10px; color: #c8a86b; text-transform: capitalize;
+    }
+
     /* Centered "Loading environment…" pill shown for the first few seconds
        of an AR session while SLAM warms up and the spatial cache seeds. */
     .env-loading {
@@ -502,10 +692,9 @@ export class ArViewComponent implements OnInit, OnDestroy {
    *  celebration overlay. */
   celebrating = signal<FossilLocation | null>(null);
   private celebrateTimeout = 0;
-  showMap = false;
   showCollection = signal(false);
-  showLearn = false;
   showLeaderboard = signal(false);
+  showHelp = signal(false);
   /** Live screen-orientation angle, kept in sync via JS so the orientation-
    *  lock overlay can show/hide reactively. Only angle=180 (upside-down
    *  portrait, back camera at bottom) is supported by 8th Wall on iPad. */
@@ -559,23 +748,6 @@ export class ArViewComponent implements OnInit, OnDestroy {
   private tooFarTimeout = 0;
   private captureTimeout = 0;
   private captureOriginTimeout = 0;
-
-  /** Wipe persisted cell rolls + already-placed fossils and re-roll. Lets
-   *  testers re-spawn fossils without manually clearing browser data.
-   *  Collected fossils (LS_COLLECTION) are kept — only the spawn pool resets. */
-  resetSpawnedCells(): void {
-    this.cellStates.clear();
-    try { localStorage.removeItem(LS_CELL_STATES); } catch { /* ignore */ }
-    this.allFossils().forEach(f => this.arService.removeFossil(f.id));
-    this.placedFossilIds.clear();
-    this.allFossils.set([]);
-    this.gps.loadFossils([]);
-    const pos = this.precisePosition() ?? this.gps.playerPosition();
-    if (pos) {
-      this.replenishFossils(pos);
-      this.syncARMarkers(this.preciseNearby());
-    }
-  }
 
   /** Bearing + distance to every active uncollected fossil, for the HUD radar/arrows.
    *  Uses XR-derived precise position when AR is active.
@@ -691,8 +863,8 @@ export class ArViewComponent implements OnInit, OnDestroy {
     const t = event.target as HTMLElement | null;
     if (t?.closest(
       'button, input, textarea, select, app-fossil-card, app-leaderboard, ' +
-      'app-display-name, .collection-panel, .icon-btn, ' +
-      '.start-ar-btn, .ar-btn, .close-btn, .collect-btn, .dn-btn',
+      'app-display-name, .collection-panel, .help-panel, .icon-btn, ' +
+      '.start-ar-btn, .ar-btn, .close-btn, .collect-btn, .dn-btn, .help-btn',
     )) return;
     if (!this.arService.active()) return;
     this.arService.handleTap(event.clientX, event.clientY);
@@ -897,6 +1069,77 @@ export class ArViewComponent implements OnInit, OnDestroy {
   /** Score for a single fossil or group — doubles for shinies. */
   pointsFor(f: { rarity: string; shiny?: boolean }): number {
     return (RARITY_POINTS[f.rarity] ?? 0) * (f.shiny ? 2 : 1);
+  }
+
+  /** Has the player ever collected a fossil with this template base ID?
+   *  Each spawned fossil's id is `${baseId}_${timestamp}_${counter}`, so
+   *  base IDs are extracted before comparison. */
+  private hasCollectedBaseId(baseId: string): boolean {
+    return this.collectedFossils().some(f => f.id.split('_')[0] === baseId);
+  }
+
+  /** Score-based levels for the help modal — same thresholds as HudComponent.
+   *  Mirrors the labels there. Secret levels (Chromaturge / Star-Touched)
+   *  are shown as hidden placeholders unless the player has already unlocked
+   *  them, so the existence of the easter eggs is hinted at without spoilers. */
+  get helpLevels(): Array<{ name: string; req: string; key: string; current: boolean }> {
+    const score = this.score();
+    const tiers: Array<{ name: string; req: string; key: string; current: boolean }> = [
+      { name: 'Novice',      req: '0 pts',     key: 'novice',      current: false },
+      { name: 'Apprentice',  req: '50 pts',    key: 'apprentice',  current: false },
+      { name: 'Explorer',    req: '150 pts',   key: 'explorer',    current: false },
+      { name: 'Specialist',  req: '400 pts',   key: 'specialist',  current: false },
+      { name: 'Expert',      req: '1,000 pts', key: 'expert',      current: false },
+      { name: 'Master',      req: '2,500 pts', key: 'master',      current: false },
+      { name: 'Scholar',     req: '5,000 pts', key: 'scholar',     current: false },
+    ];
+    const thresholds = [0, 50, 150, 400, 1000, 2500, 5000];
+    // Mark the highest score-based tier the player has reached.
+    let curIdx = 0;
+    for (let i = 0; i < thresholds.length; i++) if (score >= thresholds[i]) curIdx = i;
+    if (!this.hasChroma() && !this.hasShinyChroma()) tiers[curIdx].current = true;
+
+    // Secret tiers — show as hidden until unlocked.
+    if (this.hasChroma()) {
+      tiers.push({ name: '⟡ Chromaturge ⟡', req: 'Collect a chroma fossil',
+                   key: 'chromaturge', current: !this.hasShinyChroma() });
+    } else {
+      tiers.push({ name: '⟡ ??? ⟡', req: 'Hidden — discover the rarest of finds',
+                   key: 'secret', current: false });
+    }
+    if (this.hasShinyChroma()) {
+      tiers.push({ name: '✨ Star-Touched ✨', req: 'Collect a shiny chroma',
+                   key: 'starborn', current: true });
+    } else {
+      tiers.push({ name: '✨ ??? ✨', req: 'Hidden — even rarer still',
+                   key: 'secret', current: false });
+    }
+    return tiers;
+  }
+
+  /** Full template list for the help/about modal. Chroma rarity fossils are
+   *  flagged `mystery: true` until the player has actually collected one of
+   *  that base ID — the template name + emoji are then hidden so finding a
+   *  chroma in the wild remains a genuine surprise. */
+  get helpFossils(): Array<{ id: string; name: string; rarity: string; emoji: string; points: number; mystery: boolean }> {
+    const order: Record<string, number> = { chroma: 0, legendary: 1, epic: 2, rare: 3, common: 4 };
+    return this.fossilTemplates
+      .map(t => {
+        const collected = this.hasCollectedBaseId(t.id);
+        return {
+          id: t.id,
+          name: t.name,
+          rarity: t.rarity,
+          emoji: this.emojiFor(t.id),
+          points: RARITY_POINTS[t.rarity] ?? 0,
+          mystery: t.rarity === 'chroma' && !collected,
+        };
+      })
+      .sort((a, b) => {
+        const r = (order[a.rarity] ?? 9) - (order[b.rarity] ?? 9);
+        if (r !== 0) return r;
+        return a.name.localeCompare(b.name);
+      });
   }
 
   confettiPieces = Array.from({ length: 24 }, (_, i) => i);

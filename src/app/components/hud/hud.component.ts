@@ -16,6 +16,7 @@ export interface FossilDirection {
     <div class="hud">
       <!-- Top bar -->
       <div class="top-bar">
+        <button class="help-btn" (click)="openHelp.emit()" aria-label="Help & about">ℹ️</button>
         <div class="name-badge" *ngIf="playerName">
           <span class="name-label">Player</span>
           <span class="name-value">{{ playerName }}</span>
@@ -86,14 +87,12 @@ export interface FossilDirection {
       </ng-container>
 
       <!-- Version stamp -->
-      <div class="version-stamp">v4.0.19-ios</div>
+      <div class="version-stamp">v4.5.1-{{ iosFallback ? 'iphone-8thwall' : 'android-webxr' }}</div>
 
       <!-- Bottom bar -->
       <div class="bottom-bar">
-        <button class="icon-btn" (click)="openMap.emit()">🗺️<span>Map</span></button>
         <button class="icon-btn" (click)="openCollection.emit()">🦴<span>Collection</span></button>
         <button class="icon-btn" (click)="openLeaderboard.emit()">🏆<span>Ranks</span></button>
-        <button class="icon-btn" (click)="openLearn.emit()">📚<span>Learn</span></button>
       </div>
     </div>
   `,
@@ -111,6 +110,12 @@ export interface FossilDirection {
       background: linear-gradient(180deg, rgba(0,0,0,0.7) 0%, transparent 100%);
       pointer-events: all;
     }
+    .help-btn {
+      background: rgba(0,0,0,0.5); border: none; border-radius: 50%;
+      width: 32px; height: 32px; padding: 0; font-size: 16px; cursor: pointer;
+      pointer-events: all; line-height: 1;
+    }
+    .help-btn:active { transform: scale(0.94); }
     .score-badge, .gps-badge, .level-badge, .name-badge {
       background: rgba(0,0,0,0.5); border-radius: 20px; padding: 4px 10px;
       font-size: 12px; color: #f5e6c8; font-weight: 600;
@@ -245,12 +250,14 @@ export class HudComponent {
    *  a shiny chroma unlocks Star-Touched (takes precedence). */
   @Input() hasChroma = false;
   @Input() hasShinyChroma = false;
+  /** True when the WebXR path is unavailable and 8th Wall SLAM is in use
+   *  (iOS Safari). Drives the platform suffix in the version stamp. */
+  @Input() iosFallback = false;
 
   @Output() startAR     = new EventEmitter<void>();
-  @Output() openMap     = new EventEmitter<void>();
   @Output() openCollection = new EventEmitter<void>();
-  @Output() openLearn   = new EventEmitter<void>();
   @Output() openLeaderboard = new EventEmitter<void>();
+  @Output() openHelp    = new EventEmitter<void>();
 
   private static readonly LEVELS: [number, string, string][] = [
     [5000, 'Scholar',      'scholar'],
